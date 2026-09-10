@@ -21,6 +21,8 @@ Implements: CLI-CONFORMANCE without CLI-CONFORMANCE-2. This plan ports five
 subtests of `t/ci/wiki.t` of the Workspace. The port changes the invocation and
 the fixture, as the CLI-CONFORMANCE-1 text of plan 002 allows. The unit stays
 `partial` until the worktree, the traces, and the deps plans land their parts.
+The first of plans 002, 003, and 005 to land rewords CLI-CONFORMANCE-1, and the
+later two point at the landed text.
 
 ## Purpose
 
@@ -92,14 +94,12 @@ set to the library directory. The captured output of git goes to standard error.
 The verb writes files inside the clone only, and it checks each page name before
 the path forms.
 
-**The sandbox row adds the network and the library.** Git pushes, so the row of
-`wiki` adds the `inet` and `dns` promises, and it names `git` as its command.
-Plan 001 lists `wiki` among the verbs with a network promise in CLI-SANDBOX-2.
-The library directory can sit above the checkout root, so the row unveils it for
-read, write, and create. WIKI-CLONE-1 names that path, so it falls in the
-classes of CLI-SANDBOX-2. The `<file>` of `note` and `admit` must sit under the
-root or the temporary directory. The note skill writes it under `scratch/` of
-the root.
+**The sandbox row is pledge-only.** Git pushes, so the row of `wiki` pledges
+`stdio rpath wpath cpath fattr proc exec inet dns`. Plan 001 lists `wiki` among
+the verbs with a network promise in CLI-SANDBOX-2. Git runs as a child, so the
+row unveils nothing, as plan 001 states for a verb with a child. The `<file>` of
+`note` and `admit` must sit under the root or the temporary directory. The note
+skill writes it under `scratch/` of the root.
 
 ## The interface contract
 
@@ -140,16 +140,17 @@ and `no undelivered candidate` when none exists. With no page it writes
 
 ## Files
 
-| File                         | Change                                                       |
-| ---------------------------- | ------------------------------------------------------------ |
-| `lib/App/FuguBench/Wiki.pm`  | New: the verb                                                |
-| `lib/App/FuguBench/Wiki.pod` | New: the contract                                            |
-| `lib/App/FuguBench.pm`       | The `wiki` entry of the table, and its row                   |
-| `t/fugubench/wiki.t`         | New: the port of `t/ci/wiki.t`                               |
-| `t/fugubench/wiki-init.t`    | New: the clone, the key, and the anchor                      |
-| `t/fugubench/wiki-push.t`    | New: the count, the rename, and the retry                    |
-| `spec/wiki.md`               | The path of WIKI-CLONE-1, and the absent key of WIKI-CLONE-3 |
-| `spec/STATUS.md`             | The rows of this plan                                        |
+| File                         | Change                                                         |
+| ---------------------------- | -------------------------------------------------------------- |
+| `lib/App/FuguBench/Wiki.pm`  | New: the verb                                                  |
+| `lib/App/FuguBench/Wiki.pod` | New: the contract                                              |
+| `lib/App/FuguBench.pm`       | The `wiki` entry of the table, and its row                     |
+| `t/fugubench/wiki.t`         | New: the port of `t/ci/wiki.t`                                 |
+| `t/fugubench/wiki-init.t`    | New: the clone, the key, and the anchor                        |
+| `t/fugubench/wiki-push.t`    | New: the count, the rename, and the retry                      |
+| `spec/cli.md`                | The rewording of CLI-CONFORMANCE-1, when this plan lands first |
+| `spec/wiki.md`               | The path of WIKI-CLONE-1, and the absent key of WIKI-CLONE-3   |
+| `spec/STATUS.md`             | The rows of this plan                                          |
 
 ## Work packages
 
@@ -227,7 +228,5 @@ the clone. It covers the idempotent `close`, and the candidates with a wrapped
 
 ## Open questions
 
-- A push over HTTPS on OpenBSD reads the credential helper and the CA bundle of
-  git. The implementation confirms the unveil list on an OpenBSD host. When a
-  path is absent, it adds the path to the `wiki` row, and a rule of wiki.md
-  names it, with the code.
+None. The row of `wiki` unveils nothing, so a push over HTTPS reads the
+credential helper and the CA bundle of git.
