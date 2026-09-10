@@ -53,20 +53,19 @@ refuses such a root with a failure, so no worktree nests under another one.
 **The base resolves against the root.** The base is the `worktree.base` key,
 with the default `.claude/worktrees`. A clone under `Projects/` can inherit the
 key from the workspace file, and its worktrees still belong to the clone. So the
-value resolves against the root, not against the home of the key. The
-implementation adds this exception to the home sentence of CLI-CONFIG-2 with the
-code.
+value resolves against the root, not against the home of the key. Plan 001 lands
+that anchor in CLI-CONFIG-2, so this plan changes no rule of CLI-CONFIG.
 
 **The pid of a running child.** `Fugu::Process->run` keeps the pid of its child
 private until the child exits, so a signal handler cannot reach the group.
 `$app->command` gains the argument `group => 1`. In that form the child starts
 through `Fugu::Process->spawn_command` with `daemonize`, so it leads its own
-session. Its two streams go to one file in the temporary directory. The
-dispatcher keeps the pid in `child` while it waits, and it writes the file to
-standard error after the exit. The signal handler of create calls
-`Fugu::Process->terminate($app->child, group => 1)`. A `run` that reports the
-pid to its caller is follow-on work of Fugu, and the group form then shrinks to
-one flag.
+session. The child gets one handle for both streams, on one file in the
+temporary directory. The dispatcher keeps the pid in `child` while it waits, and
+it writes the file to standard error after the exit. The signal handler of
+create calls `Fugu::Process->terminate($app->child, group => 1)`. A `run` that
+reports the pid to its caller is follow-on work of Fugu, and the group form then
+shrinks to one flag.
 
 **The cleanup of create runs every step.** The steps are the worktree removal,
 the directory removal, the branch deletion, `git worktree prune`, and the parent
@@ -87,13 +86,16 @@ implementation adds the line shape to WT-LIST-1 with the code.
 **The port changes more than the invocation.** The fixture of the test gains an
 empty `.toolingrc`, because the checkout walk stops without one. The assertion
 on `mk/local.mk` goes, because it tests a file of the Workspace, and the
-Workspace test keeps it. Every other line stays. The implementation adds the
-fixture sentence to CLI-CONFORMANCE-1 with the code.
+Workspace test keeps it. Every other line stays. The implementation rewords
+CLI-CONFORMANCE-1 with the code. The new text: "with the invocation and the
+fixture changed, and nothing else". It adds: "an assertion on a file of the
+Workspace stays in the Workspace test".
 
 **The sandbox row.** Create, remove, and clone pledge
 `stdio rpath wpath cpath fattr proc exec`. List pledges `stdio rpath proc exec`.
-The row unveils nothing beyond the list of plan 001. The current directory of a
-bootstrap sits under the base, so clone writes inside the root.
+The row names `git` and `make` as its commands, and it unveils no path beyond
+the shared paths of plan 001. The current directory of a bootstrap sits under
+the base, so clone writes inside the root.
 
 ## The interface contract
 
@@ -133,17 +135,17 @@ the child to standard error, and it returns as the plain form does.
 
 ## Files
 
-| File                             | Change                                                    |
-| -------------------------------- | --------------------------------------------------------- |
-| `lib/App/FuguBench/Worktree.pm`  | New: the verb and its four subcommands                    |
-| `lib/App/FuguBench/Worktree.pod` | New: the contract                                         |
-| `lib/App/FuguBench.pm`           | The verb row, the sandbox row, and the group form         |
-| `lib/App/FuguBench.pod`          | The group form and `child`                                |
-| `t/fugubench/worktree.t`         | New: the port of Workspace `t/ci/worktree.t`              |
-| `t/fugubench/worktree-verb.t`    | New: the create, the remove, and the clone cases          |
-| `spec/cli.md`                    | The base exception of CLI-CONFIG-2, and CLI-CONFORMANCE-1 |
-| `spec/worktree.md`               | The first-character rules, and the list line shape        |
-| `spec/STATUS.md`                 | The rows of this plan                                     |
+| File                             | Change                                             |
+| -------------------------------- | -------------------------------------------------- |
+| `lib/App/FuguBench/Worktree.pm`  | New: the verb and its four subcommands             |
+| `lib/App/FuguBench/Worktree.pod` | New: the contract                                  |
+| `lib/App/FuguBench.pm`           | The verb row, the sandbox row, and the group form  |
+| `lib/App/FuguBench.pod`          | The group form and `child`                         |
+| `t/fugubench/worktree.t`         | New: the port of Workspace `t/ci/worktree.t`       |
+| `t/fugubench/worktree-verb.t`    | New: the create, the remove, and the clone cases   |
+| `spec/cli.md`                    | The rewording of CLI-CONFORMANCE-1                 |
+| `spec/worktree.md`               | The first-character rules, and the list line shape |
+| `spec/STATUS.md`                 | The rows of this plan                              |
 
 ## Work packages
 
