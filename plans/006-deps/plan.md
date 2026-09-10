@@ -104,18 +104,18 @@ The verb gives an absent file and a file with no line the empty set, and hands
 every other file to the reader. It runs the scheme test of DEPS-TIER-5 over the
 keys. `write_manifest` sorts the keys, so a second refresh makes a stable diff.
 
-**`deps` has no checkout, and its sandbox row unveils nothing.** The verb reads
+**`deps` has no checkout, and both rows are pledge-only.** The verb reads
 `deps/<OS>.txt` relative to the start directory (CLI-CHECKOUT-5), and the
 dispatcher builds no checkout for `deps` and `fetch`. Plan 001 adds `fetch` to
 the exception of CLI-CHECKOUT-5. Unveil inherits across exec, and the package
-managers, cpanm, and a `bin` install write outside every path of the row. So the
-`deps` row holds the network promises and `proc exec`, names no path and no
-command, and calls no unveil. The `bin` install still checks the digest before
-the copy (DEPS-TIER). Fugu LIB-CURL runs the downloader as a child, so the
-`fetch` row holds the network promises and `proc exec`. It names `curl`, `wget`,
-and `ftp` as its commands, and it unveils the directory of its file `rwc`. Plan
-001 rewords CLI-SANDBOX-2 and states that `deps` unveils nothing, so this plan
-changes no sentence of CLI-SANDBOX-2.
+managers, cpanm, and a `bin` install write outside every path of a row. So the
+`deps` row pledges `stdio rpath wpath cpath proc exec inet dns` and unveils
+nothing. The file promises cover the manifest read and the digest file write,
+and `proc exec` covers each child. The `bin` install still checks the digest
+before the copy (DEPS-TIER). Fugu LIB-CURL runs the downloader as a child, so
+the `fetch` row pledges `stdio rpath wpath cpath proc exec inet dns` and unveils
+nothing. Plan 001 rewords CLI-SANDBOX-2 and states that `deps` unveils nothing,
+so this plan changes no sentence of CLI-SANDBOX-2.
 
 **The exit codes follow the kind of the fault.** A usage error exits 2: an
 unknown environment word, `--force` without `--update-sums`, and `--dry-run` or
