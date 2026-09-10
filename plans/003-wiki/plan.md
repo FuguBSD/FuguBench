@@ -8,9 +8,8 @@ on it: `hook SessionStart` and `hook SessionEnd` call the `init`, `open`, and
 `hook-end` of the Workspace script are not part of this plan. The hook subtest
 of `t/ci/wiki.t` waits for plan 004 with them.
 
-Two changes of the Workspace follow this plan: its `.toolingrc` must gain
-`wiki.origin https://github.com/FuguBSD/Wiki`, and `make rule-candidates` and
-the note skill swap to the verb.
+The Workspace follows with a change of its own: its `.toolingrc` key and its
+callers of the script.
 
 Implements: WIKI-CLONE. Implements: WIKI-PAGES. Implements: WIKI-OPEN.
 Implements: WIKI-CAPTURE. Implements: WIKI-STATUS. Implements: WIKI-CONFINE.
@@ -18,10 +17,10 @@ Implements: WIKI-CAPTURE. Implements: WIKI-STATUS. Implements: WIKI-CONFINE.
 Implements: CLI-VERBS. Implements: CLI-SANDBOX. This plan adds the `wiki` verb
 and its sandbox row. Both units stay `partial` until the last verb lands.
 
-Implements: CLI-CONFORMANCE without CLI-CONFORMANCE-2. This plan ports
-`t/ci/wiki.t` of the Workspace with the invocation changed and nothing else. The
-unit stays `partial` until the worktree, the traces, and the deps plans land
-their parts.
+Implements: CLI-CONFORMANCE without CLI-CONFORMANCE-2. This plan ports five
+subtests of `t/ci/wiki.t` of the Workspace. The port changes the invocation and
+the fixture, as the CLI-CONFORMANCE-1 text of plan 002 allows. The unit stays
+`partial` until the worktree, the traces, and the deps plans land their parts.
 
 ## Purpose
 
@@ -55,13 +54,17 @@ a checkout of its own, and its root holds no library. `wiki.dir` has a default,
 so its home is the root when the file omits it. `wiki.origin` has no default, so
 its home is the directory of the file that holds it: the workspace. The library
 directory is `<home of wiki.origin>/<wiki.dir>`. The implementation changes
-`<root>/<wiki.dir>` of WIKI-CLONE-1 to that path with the code.
+`<root>/<wiki.dir>` of WIKI-CLONE-1 to that path with the code. Plan 001 lands
+the anchor in CLI-CONFIG-2, the `wiki.dir` row, and CLI-CHECKOUT-2, so this plan
+changes no rule of cli.md.
 
-**A missing `wiki.origin` is a configuration error for every subcommand.**
-CLI-CONFIG-2 stops a verb that needs a key without a default. Every subcommand
-needs the key to find the clone, `candidates` included. WIKI-STATUS-3 covers an
-absent clone and an absent page. The implementation adds that sentence to
-WIKI-STATUS-3 with the code.
+**A missing `wiki.origin` stops `init` alone.** `init` needs the key to clone,
+so an absent key stops it with a configuration error, and the message names the
+key (CLI-CONFIG-2). Every other subcommand treats an absent key as an absent
+clone: it reports the absence on standard error and exits zero (WIKI-CLONE-3).
+The table of CLI-CONFIG names `init` as the verb that stops, and WIKI-STATUS-3
+holds for `candidates`. The implementation adds the absent-key sentence to
+WIKI-CLONE-3 with the code.
 
 **The fetch comes first.** `open` fetches the current branch of the origin
 before it picks `<n>`. When the local branch has no commit of its own, the verb
@@ -90,11 +93,13 @@ The verb writes files inside the clone only, and it checks each page name before
 the path forms.
 
 **The sandbox row adds the network and the library.** Git pushes, so the row of
-`wiki` adds the `inet` and `dns` promises. The library directory can sit above
-the checkout root, so the row unveils it for read, write, and create.
-CLI-SANDBOX-2 names no library directory, and the implementation adds it with
-the code. The `<file>` of `note` and `admit` must sit under the root or the
-temporary directory. The note skill writes it under `scratch/` of the root.
+`wiki` adds the `inet` and `dns` promises, and it names `git` as its command.
+Plan 001 lists `wiki` among the verbs with a network promise in CLI-SANDBOX-2.
+The library directory can sit above the checkout root, so the row unveils it for
+read, write, and create. WIKI-CLONE-1 names that path, so it falls in the
+classes of CLI-SANDBOX-2. The `<file>` of `note` and `admit` must sit under the
+root or the temporary directory. The note skill writes it under `scratch/` of
+the root.
 
 ## The interface contract
 
@@ -105,20 +110,21 @@ dispatches one subcommand, and it returns the exit code. The hook verb calls it
 with `init`, `open`, and `close`, in process.
 
 An unknown subcommand, a wrong argument count, or an invalid name is a usage
-error. The message names the value, and the exit code is 2. An absent
-`wiki.origin` on the walk exits 3, and the message names the key. An absent
-clone writes `no library at <dir>` to standard error, and the subcommand exits 0
-with no result line, except `init`.
+error. The message names the value, and the exit code is 2. In `init`, an absent
+`wiki.origin` on the walk exits 3, and the message names the key. In every other
+subcommand, an absent clone writes `no library at <dir>` to standard error, and
+an absent key writes `no library, wiki.origin is unset`. The subcommand then
+exits 0 with no result line.
 
-| Subcommand   | Arguments             | Result line                                    | Exit code                                |
-| ------------ | --------------------- | ---------------------------------------------- | ---------------------------------------- |
-| `init`       | none                  | The library directory, on a fresh clone only   | 0; a failed clone warns and exits 0      |
-| `open`       | `<project> <session>` | The final page name, the only line             | 0                                        |
-| `note`       | `<page> <file>`       | The page name, with `.md`                      | 0; no page, no file, or an empty file: 1 |
-| `admit`      | `<page> <file>`       | The page name, with `.md`                      | 0; no page, no file, or an empty file: 1 |
-| `close`      | `<session>`           | The page name, when the page changes           | 0; no page, or a closed page: 0, no line |
-| `status`     | none                  | The `open sessions:` report, then the unpushed | 0                                        |
-| `candidates` | none                  | One line per candidate, or the none line       | 0, also with no clone and with no page   |
+| Subcommand   | Arguments             | Result line                                    | Exit code                                                    |
+| ------------ | --------------------- | ---------------------------------------------- | ------------------------------------------------------------ |
+| `init`       | none                  | The library directory, on a fresh clone only   | 0; a failed clone warns and exits 0; 3 without `wiki.origin` |
+| `open`       | `<project> <session>` | The final page name, the only line             | 0                                                            |
+| `note`       | `<page> <file>`       | The page name, with `.md`                      | 0; no page, no file, or an empty file: 1                     |
+| `admit`      | `<page> <file>`       | The page name, with `.md`                      | 0; no page, no file, or an empty file: 1                     |
+| `close`      | `<session>`           | The page name, when the page changes           | 0; no page, or a closed page: 0, no line                     |
+| `status`     | none                  | The `open sessions:` report, then the unpushed | 0                                                            |
+| `candidates` | none                  | One line per candidate, or the none line       | 0, also with no clone and with no page                       |
 
 The commit subjects are `open: <page>`, `note: <page>`, `admit: <page>`, and
 `close: <page>`. A failed push warns and exits 0 in every subcommand, and the
@@ -129,22 +135,21 @@ page, the `Claim:` count, and the `Admitted:` count. With no open session it
 prints `open sessions: none`. The last line is `unpushed commits: <n>`.
 
 `candidates` prints `<age> d  <date>  <text>` for each undelivered candidate,
-and `no undelivered candidate` when none exists. With no clone or no page it
-writes `no Rule-candidates.md, nothing to report` to standard error.
+and `no undelivered candidate` when none exists. With no page it writes
+`no Rule-candidates.md, nothing to report` to standard error.
 
 ## Files
 
-| File                         | Change                                             |
-| ---------------------------- | -------------------------------------------------- |
-| `lib/App/FuguBench/Wiki.pm`  | New: the verb                                      |
-| `lib/App/FuguBench/Wiki.pod` | New: the contract                                  |
-| `lib/App/FuguBench.pm`       | The `wiki` entry of the table, and its row         |
-| `t/fugubench/wiki.t`         | New: the port of `t/ci/wiki.t`                     |
-| `t/fugubench/wiki-init.t`    | New: the clone, the key, and the anchor            |
-| `t/fugubench/wiki-push.t`    | New: the count, the rename, and the retry          |
-| `spec/wiki.md`               | The path of WIKI-CLONE-1, the key of WIKI-STATUS-3 |
-| `spec/cli.md`                | The library directory of CLI-SANDBOX-2             |
-| `spec/STATUS.md`             | The rows of this plan                              |
+| File                         | Change                                                       |
+| ---------------------------- | ------------------------------------------------------------ |
+| `lib/App/FuguBench/Wiki.pm`  | New: the verb                                                |
+| `lib/App/FuguBench/Wiki.pod` | New: the contract                                            |
+| `lib/App/FuguBench.pm`       | The `wiki` entry of the table, and its row                   |
+| `t/fugubench/wiki.t`         | New: the port of `t/ci/wiki.t`                               |
+| `t/fugubench/wiki-init.t`    | New: the clone, the key, and the anchor                      |
+| `t/fugubench/wiki-push.t`    | New: the count, the rename, and the retry                    |
+| `spec/wiki.md`               | The path of WIKI-CLONE-1, and the absent key of WIKI-CLONE-3 |
+| `spec/STATUS.md`             | The rows of this plan                                        |
 
 ## Work packages
 
@@ -170,12 +175,13 @@ the URL holds a scheme. The child runs with `HOME` set to the temp tree and with
 agent. The bare origin sets `receive.denyNonFastForwards`, as the ruleset of the
 library does.
 
-`t/fugubench/wiki.t` is `t/ci/wiki.t` with the invocation changed and nothing
-else: the `scripts/wiki.pl` marker of a checkout becomes its `.toolingrc`, and
-`_wiki` runs the program. It covers the idempotent `open`, and the `note` that
-reaches the origin. It covers the rejected push that rebases and retries, and
-the page names that stay inside the clone. It covers the idempotent `close`, and
-the candidates with a wrapped `Delivered:`.
+`t/fugubench/wiki.t` is `t/ci/wiki.t` with the invocation and the fixture
+changed, as the CLI-CONFORMANCE-1 text of plan 002 allows. The `scripts/wiki.pl`
+marker of a checkout becomes its `.toolingrc`, and `_wiki` runs the program. It
+covers the idempotent `open`, and the `note` that reaches the origin. It covers
+the rejected push that rebases and retries, and the page names that stay inside
+the clone. It covers the idempotent `close`, and the candidates with a wrapped
+`Delivered:`.
 
 `t/fugubench/wiki-init.t` covers:
 
@@ -183,12 +189,13 @@ the candidates with a wrapped `Delivered:`.
   prints nothing and changes nothing.
 - A `wiki.origin` that no repository answers: `init` warns, exits 0, and makes
   no directory.
-- No `wiki.origin` on the walk: each subcommand exits 3, and the message names
-  the key.
+- No `wiki.origin` on the walk: `init` exits 3, and the message names the key.
+  Every other subcommand reports the absent key on standard error, exits 0, and
+  prints no result line.
 - A checkout under `Projects/` of a workspace: the library is the `Wiki` of the
   workspace, not of the clone.
-- No clone: `open`, `note`, `close`, and `status` report the absence on standard
-  error, exit 0, and print no result line. `candidates` exits 0.
+- No clone: every subcommand except `init` reports the absence on standard
+  error, exits 0, and prints no result line.
 
 `t/fugubench/wiki-push.t` covers:
 
@@ -222,4 +229,5 @@ the candidates with a wrapped `Delivered:`.
 
 - A push over HTTPS on OpenBSD reads the credential helper and the CA bundle of
   git. The implementation confirms the unveil list on an OpenBSD host. When a
-  path is absent, it adds the path to CLI-SANDBOX-2 with the code.
+  path is absent, it adds the path to the `wiki` row, and a rule of wiki.md
+  names it, with the code.
