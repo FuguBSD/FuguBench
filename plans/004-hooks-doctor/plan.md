@@ -15,6 +15,10 @@ the table.
 
 Implements: CLI-SANDBOX. This plan adds the rows of the two verbs.
 
+Implements: CLI-CONFORMANCE without CLI-CONFORMANCE-2. This plan ports the hook
+subtest of the Workspace `t/ci/wiki.t`, and the unit stays `partial` until the
+last part lands.
+
 ## Purpose
 
 The hook verb holds the Claude Code assumptions (D-10) and reads each payload
@@ -44,10 +48,10 @@ Out of scope:
 builds the checkout from `-C` or from the current directory. The hook verb reads
 the payload, builds `App::FuguBench::Checkout->new(start => $cwd)` from the
 payload `cwd` (HOOK-EVENTS-5), and sets it on the dispatcher. This plan adds the
-one-argument form `checkout($checkout)` to `App::FuguBench`. The `hook` verb
-enters its sandbox row itself, after it reads the payload and sets the checkout.
-The row then unveils the root of the payload `cwd`. The dispatcher enters no row
-for `hook`.
+one-argument form `checkout($checkout)` to `App::FuguBench`. The `hook` row is
+pledge-only, so the dispatcher enters it before the verb, as for every verb. The
+payload `cwd` needs no early root, and `hook install` runs under the same
+pledge.
 
 **The hook verb calls the other verbs in-process.** It calls the `run` entry of
 `App::FuguBench::Wiki->command` and of `App::FuguBench::Worktree->command` with
@@ -78,10 +82,8 @@ a file whose arrays break, and the Workspace file is such a file.
 is `REBASE_HEAD`. The doctor lists its files with
 `git show --name-status --format= REBASE_HEAD`, and it reads the page with
 `git show REBASE_HEAD:<page>`. The row of `doctor` pledges
-`stdio rpath proc exec` for that call and for `--fix`. It names `git`, `make`,
-`curl`, `wget`, and `ftp` as its commands, and the dispatcher unveils the path
-of each one that `PATH` holds. It takes the unveil paths of the `wiki` row, so
-the tool check and the git call see one view.
+`stdio rpath proc exec` for that call and for `--fix`. Git runs as a child, so
+the row unveils nothing, as plan 001 states for a verb with a child.
 
 **The fix has one shape.** `doctor --fix` runs `git rebase --skip` in the clone
 when the pending commit has the shape of the race. That commit adds one file,
@@ -94,9 +96,9 @@ other pending commit is a refusal, with the reason on standard error.
 
 `checkout($checkout)` sets the checkout of the run and returns it. The verb
 table gains `hook` and `doctor`. The sandbox table gains the row of `hook` and
-the row of `doctor`. The `hook` row is the union of the `wiki` row and the
-`worktree` row: promises, paths, and commands. The dispatcher skips the entry of
-the `hook` row, and the verb enters it after the payload read.
+the row of `doctor`. The `hook` row pledges the union of the `wiki` promises and
+the `worktree` promises: `stdio rpath wpath cpath fattr proc exec inet dns`.
+Both rows unveil nothing.
 
 ### App::FuguBench::Hook
 
@@ -109,13 +111,14 @@ parse warns and returns 0. A payload with `agent_id` returns 0 at once, and
 reads no checkout. A payload without `cwd`, or a `cwd` with no `.toolingrc`
 above it, warns. A session event then returns 0, and `WorktreeCreate` returns 1
 with no path line. Every event sets the checkout of the payload on the
-dispatcher, and then enters the sandbox row of `hook`.
+dispatcher.
 
 `SessionStart` takes `session_id`, replaces each character outside letters,
 digits, a dot, a dash, and an underscore with a dash, and runs `wiki init` and
 `wiki open <project> <session>`. The project is the child of `wiki.projects`
-under its home that holds the absolute `cwd`, and otherwise `wiki.project`. It
-returns 0.
+that holds the absolute `cwd`, and otherwise `wiki.project`. `wiki.projects`
+resolves against the home of `wiki.origin`, as plan 001 states for every `wiki.`
+value. `SessionStart` returns 0.
 
 `SessionEnd` runs `wiki close <session>` and returns 0.
 
@@ -158,19 +161,19 @@ rebase.
 
 ## Files
 
-| File                           | Change                                                                            |
-| ------------------------------ | --------------------------------------------------------------------------------- |
-| `lib/App/FuguBench.pm`         | The two table entries, the two rows, `checkout($c)`, and the late entry of `hook` |
-| `lib/App/FuguBench.pod`        | The one-argument form of `checkout`                                               |
-| `lib/App/FuguBench/Hook.pm`    | New: the four events, `install`, and `entries`                                    |
-| `lib/App/FuguBench/Hook.pod`   | New: the contract                                                                 |
-| `lib/App/FuguBench/Doctor.pm`  | New: the report and `--fix`                                                       |
-| `lib/App/FuguBench/Doctor.pod` | New: the contract                                                                 |
-| `t/fugubench/hook.t`           | New: the four events on fixture payloads                                          |
-| `t/fugubench/hook-install.t`   | New: the settings writer                                                          |
-| `t/fugubench/doctor.t`         | New: the report, the stopped rebase, and the fix                                  |
-| `spec/hooks.md`                | The split sentence of HOOK-WORKTREE-2                                             |
-| `spec/STATUS.md`               | The rows of this plan                                                             |
+| File                           | Change                                                                          |
+| ------------------------------ | ------------------------------------------------------------------------------- |
+| `lib/App/FuguBench.pm`         | The two table entries, the two rows, and `checkout($c)`                         |
+| `lib/App/FuguBench.pod`        | The one-argument form of `checkout`                                             |
+| `lib/App/FuguBench/Hook.pm`    | New: the four events, `install`, and `entries`                                  |
+| `lib/App/FuguBench/Hook.pod`   | New: the contract                                                               |
+| `lib/App/FuguBench/Doctor.pm`  | New: the report and `--fix`                                                     |
+| `lib/App/FuguBench/Doctor.pod` | New: the contract                                                               |
+| `t/fugubench/hook.t`           | New: the four events on fixture payloads, and the hook subtest of `t/ci/wiki.t` |
+| `t/fugubench/hook-install.t`   | New: the settings writer                                                        |
+| `t/fugubench/doctor.t`         | New: the report, the stopped rebase, and the fix                                |
+| `spec/hooks.md`                | The split sentence of HOOK-WORKTREE-2                                           |
+| `spec/STATUS.md`               | The rows of this plan                                                           |
 
 ## Work packages
 
@@ -202,6 +205,8 @@ bare origin and a checkout whose `.toolingrc` names it as `wiki.origin` with a
 - `WorktreeRemove` keeps the directory, prints the manual command with the root
   and the name, and exits 0.
 - A word outside the five exits 2.
+- The hook subtest of the Workspace `t/ci/wiki.t`, with the invocation and the
+  fixture changed, as the CLI-CONFORMANCE-1 text of plan 002 allows.
 
 `t/fugubench/hook-install.t` covers:
 
@@ -227,8 +232,8 @@ bare origin and a checkout whose `.toolingrc` names it as `wiki.origin` with a
 
 - `make check` passes, with the three tests in the tier.
 - `spec/STATUS.md` sets HOOK-EVENTS, HOOK-SESSION, HOOK-WORKTREE, HOOK-INSTALL,
-  and CLI-DOCTOR to `done`. It updates the `partial` notes of CLI-VERBS and
-  CLI-SANDBOX.
+  and CLI-DOCTOR to `done`. It updates the `partial` notes of CLI-VERBS,
+  CLI-SANDBOX, and CLI-CONFORMANCE.
 - `spec/hooks.md` holds the split sentence of HOOK-WORKTREE-2.
 - The change deletes this plan.
 
