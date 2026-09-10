@@ -104,15 +104,18 @@ The verb gives an absent file and a file with no line the empty set, and hands
 every other file to the reader. It runs the scheme test of DEPS-TIER-5 over the
 keys. `write_manifest` sorts the keys, so a second refresh makes a stable diff.
 
-**`deps` has no checkout, and its sandbox row names the start.** The verb reads
+**`deps` has no checkout, and its sandbox row unveils nothing.** The verb reads
 `deps/<OS>.txt` relative to the start directory (CLI-CHECKOUT-5), and the
-dispatcher builds no checkout for `deps` and `fetch`. The `deps` row unveils the
-start directory, `~/.local/bin`, and the temporary directory. It holds the
-network promises, and `proc exec` for the package managers, cpanm, tar, and
-unzip. The `fetch` row unveils the directory of its file, with the network
-promises. The implementation adds two sentences to CLI-SANDBOX-2 with the code.
-`deps` unveils the start directory in place of the root, and `fetch` takes the
-network promises too.
+dispatcher builds no checkout for `deps` and `fetch`. Plan 001 adds `fetch` to
+the exception of CLI-CHECKOUT-5. Unveil inherits across exec, and the package
+managers, cpanm, and a `bin` install write outside every path of the row. So the
+`deps` row holds the network promises and `proc exec`, names no path and no
+command, and calls no unveil. The `bin` install still checks the digest before
+the copy (DEPS-TIER). Fugu LIB-CURL runs the downloader as a child, so the
+`fetch` row holds the network promises and `proc exec`. It names `curl`, `wget`,
+and `ftp` as its commands, and it unveils the directory of its file `rwc`. Plan
+001 rewords CLI-SANDBOX-2 and states that `deps` unveils nothing, so this plan
+changes no sentence of CLI-SANDBOX-2.
 
 **The exit codes follow the kind of the fault.** A usage error exits 2: an
 unknown environment word, `--force` without `--update-sums`, and `--dry-run` or
@@ -160,7 +163,7 @@ returns 1, and no file stays at the destination.
 | `t/fugubench/deps-sums.t`                | New: `--update-sums` and `--force`                   |
 | `t/fugubench/deps/<consumer>/deps/*.txt` | New: the manifests and digest files of each consumer |
 | `t/fugubench/deps/fixture/`              | New: a signify key, a signed release, and an archive |
-| `spec/cli.md`                            | The sentences of CLI-CONFORMANCE-2 and CLI-SANDBOX-2 |
+| `spec/cli.md`                            | The sentence of CLI-CONFORMANCE-2                    |
 | `spec/STATUS.md`                         | The rows of this plan                                |
 
 The consumers are Fugu, FuguBench, FuguCTX, FuguOracle, FuguPass, FuguSTX,
