@@ -16,7 +16,8 @@ the last verb lands.
 Implements: CLI-CONFORMANCE without CLI-CONFORMANCE-2. This plan ports the
 Workspace test `t/ci/worktree.t`. The tests of `wiki.pl` and `traces.pl` come
 with their verbs. The dry-run trace comes with the dependency installer. The
-unit stays `partial` until then.
+unit stays `partial` until then. The first of plans 002, 003, and 005 to land
+rewords CLI-CONFORMANCE-1, and the later two point at the landed text.
 
 ## Purpose
 
@@ -91,11 +92,11 @@ CLI-CONFORMANCE-1 with the code. The new text: "with the invocation and the
 fixture changed, and nothing else". It adds: "an assertion on a file of the
 Workspace stays in the Workspace test".
 
-**The sandbox row.** Create, remove, and clone pledge
+**The sandbox row is pledge-only.** Create, remove, and clone pledge
 `stdio rpath wpath cpath fattr proc exec`. List pledges `stdio rpath proc exec`.
-The row names `git` and `make` as its commands, and it unveils no path beyond
-the shared paths of plan 001. The current directory of a bootstrap sits under
-the base, so clone writes inside the root.
+The bootstrap `make` runs a tool set that no row can enumerate. So the row
+unveils nothing, as plan 001 states for a verb with a child. The current
+directory of a bootstrap sits under the base, so clone writes inside the root.
 
 ## The interface contract
 
