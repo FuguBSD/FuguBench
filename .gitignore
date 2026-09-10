@@ -1,0 +1,60 @@
+# The org pack of FuguBSD/Tooling owns this file. Do not edit a
+# synced copy. Edit the canonical copy in FuguBSD/Tooling.
+#
+# The org ignore list. One list serves every consumer, so it holds
+# the union of all consumer needs. A pattern that a repository does
+# not use is harmless there.
+
+# Secrets
+.env
+.claude/settings.local.json*
+
+# Scratch space of the development rules
+scratch/
+SCRATCHPAD*.md
+.claude/worktrees/
+
+# Project clones and the learning library of the workspace checkout
+Projects/
+Wiki/
+
+# Operating system
+.DS_Store
+
+# Editors
+.idea/
+.vscode/
+
+# Website build
+web/build/
+
+# Perl build
+build/
+local/
+external/
+*.cat1
+
+# Python build
+.venv/
+__pycache__/
+*.egg-info/
+.ruff_cache/
+.pytest_cache/
+
+# OpenTofu state
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+*.auto.tfvars
+*.tfplan
+crash.log
+crash.*.log
+
+# Virtual machine state and images
+.fuguvm/
+.cache/
+*.qcow2
+*.img
+*.iso
+*.pid
+*.log

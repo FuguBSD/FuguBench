@@ -1,0 +1,11 @@
+# Per-repo configuration for the shared FuguBSD tooling. The synced
+# scripts read their identity keys here. See FuguBSD/Tooling.
+sync.pack org
+sync.pack perl
+dist.name     App-FuguBench
+dist.module   App::FuguBench
+dist.abstract outfit a FuguBSD checkout for a coding agent
+dist.author   Dick Olsson <hi@senzilla.io>
+dist.exe      bin/fugubench
+dist.testdir  t/fugubench
+dist.prereq   Fugu

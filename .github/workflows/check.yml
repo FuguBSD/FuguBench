@@ -1,0 +1,115 @@
+name: Check
+
+# The gitleaks job reads every path, so no paths filter applies:
+# every push must run the secrets scan.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Perl
+        uses: FuguBSD/Tooling/perl/actions/setup-perl@main
+        with:
+          dependencies: test
+
+      # The format gate runs prettier through bunx.
+      - name: Setup bun
+        uses: FuguBSD/Tooling/actions/setup-bun@main
+
+      - name: Check formatting
+        run: make format
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Perl
+        uses: FuguBSD/Tooling/perl/actions/setup-perl@main
+        with:
+          dependencies: test
+
+      - name: Check lint
+        run: make lint
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Perl
+        uses: FuguBSD/Tooling/perl/actions/setup-perl@main
+        with:
+          dependencies: test
+
+      - name: Run tests
+        run: make test
+
+  drift:
+    name: Drift
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout the shared tooling
+        uses: actions/checkout@v4
+        with:
+          repository: FuguBSD/Tooling
+          path: tooling
+
+      # The synced copies under scripts/, t/ci/ and the lint
+      # configurations must match FuguBSD/Tooling exactly.
+      - name: Check tooling drift
+        run: ./tooling/scripts/sync --check
+
+  spec:
+    name: Spec
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate the specification
+        run: make spec-check
+
+      - name: Check the prose
+        run: make ste-lint
+
+      - name: Drift gate
+        if: github.event_name == 'pull_request'
+        run: scripts/spec-check --drift "origin/${{ github.base_ref }}"
+
+  gitleaks:
+    name: Gitleaks
+    runs-on: ubuntu-latest
+
+    steps:
+      # The gate scans the git history, so the checkout is full
+      # (WFL-GITLEAKS-2). A shallow checkout hides old commits.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          make deps
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Scan for secrets
+        run: make gitleaks
