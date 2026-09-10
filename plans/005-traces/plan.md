@@ -19,7 +19,9 @@ Implements: CLI-CONFORMANCE without CLI-CONFORMANCE-2. This plan ports the
 Workspace test `t/ci/traces.t`, with the invocation and the fixture changed, as
 the CLI-CONFORMANCE-1 text of plan 002 allows. The tests of `worktree.pl` and
 `wiki.pl` come with their verbs, and the dry-run trace of `deps` comes with the
-installer. The unit stays `partial` until those plans land.
+installer. The unit stays `partial` until those plans land. The first of plans
+002, 003, and 005 to land rewords CLI-CONFORMANCE-1, and the later two point at
+the landed text.
 
 ## Purpose
 
@@ -67,12 +69,12 @@ the path of TRACE-NAME-1, and `--name` does not change it. The implementation
 adds the words "of TRACE-NAME-1" to TRACE-PANEL-3 with the code.
 
 **The sandbox row needs the trace root.** `traces` runs no child command, so its
-row names no command, and it needs no network promise (CLI-SANDBOX-2). It reads
-the trace root, `~/.claude/projects/` or the `--root` value, and the row adds
-that path `r`. TRACE-NAME-3 names the path, so it falls in the classes of
-CLI-SANDBOX-2, and this plan changes no rule of cli.md. The row depends on a
-parsed option, so the dispatcher resolves the row after the parse and before the
-entry.
+row pledges and unveils, as plan 001 states. It needs no network promise
+(CLI-SANDBOX-2). It reads the trace root, `~/.claude/projects/` or the `--root`
+value, and the row adds that path `r`. Plan 001 lists the trace root among the
+unveil classes of CLI-SANDBOX-2, so this plan changes no rule of cli.md. The row
+depends on a parsed option, so the dispatcher resolves the row after the parse
+and before the entry.
 
 **The record filter is the contract.** A full parse of every record costs
 minutes over a long history (TRACE-USAGE-2). The verb decodes each record until
@@ -113,19 +115,20 @@ matches the name, it prints `no session of <name>` and exits 0.
 
 ### The sandbox row
 
-The row of `traces` holds the read promises, no network promise, and no command.
-Its unveil list holds the shared paths of plan 001 and the trace root `r`.
+The row of `traces` pledges `stdio rpath`, with no network promise. Its unveil
+list holds the shared paths of plan 001 and the trace root `r`.
 
 ## Files
 
-| File                           | Change                                         |
-| ------------------------------ | ---------------------------------------------- |
-| `lib/App/FuguBench/Traces.pm`  | New: the verb                                  |
-| `lib/App/FuguBench/Traces.pod` | New: the contract                              |
-| `lib/App/FuguBench.pm`         | The `traces` entry and its sandbox row         |
-| `t/fugubench/traces.t`         | New: the port of the Workspace `t/ci/traces.t` |
-| `spec/traces.md`               | The boundary words of TRACE-PANEL-3            |
-| `spec/STATUS.md`               | The rows of this plan                          |
+| File                           | Change                                                         |
+| ------------------------------ | -------------------------------------------------------------- |
+| `lib/App/FuguBench/Traces.pm`  | New: the verb                                                  |
+| `lib/App/FuguBench/Traces.pod` | New: the contract                                              |
+| `lib/App/FuguBench.pm`         | The `traces` entry and its sandbox row                         |
+| `t/fugubench/traces.t`         | New: the port of the Workspace `t/ci/traces.t`                 |
+| `spec/cli.md`                  | The rewording of CLI-CONFORMANCE-1, when this plan lands first |
+| `spec/traces.md`               | The boundary words of TRACE-PANEL-3                            |
+| `spec/STATUS.md`               | The rows of this plan                                          |
 
 ## Work packages
 
