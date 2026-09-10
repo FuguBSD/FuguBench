@@ -15,14 +15,15 @@ pack (D-09). The release workflow publishes `fugubench` and `install.sh` under
 DIST-ASSETS, in the plan of that unit.
 
 Implements: DIST-PACK. Implements: DIST-SHIM. Implements: DIST-INSTALL without
-DIST-INSTALL-3. Implements: DIST-KEY.
+DIST-INSTALL-3. Implements: DIST-KEY without DIST-KEY-2.
 
 Implements: CLI-VERBS. This plan adds the `shim` verb and the `install` verb.
 
 Implements: CLI-SANDBOX. This plan adds the rows of the two verbs.
 
-Implements: CLI-PROGRAM. The packed file runs with core perl and no installed
-Fugu, so CLI-PROGRAM-1 holds with the pack.
+Implements: CLI-PROGRAM. This plan lands the one-file rule of CLI-PROGRAM-1: the
+packed file runs with core perl and no installed Fugu. The perl 5.34 run waits
+with DIST-PACK-5 on a Fugu release with the floor, so the unit stays `partial`.
 
 ## Purpose
 
@@ -100,8 +101,9 @@ the module to that file.
 **Neither verb reads a checkout.** `curl | sh` runs `install` in a home with no
 `.toolingrc`, and a fresh clone runs the shim before any install. The two verbs
 never call `checkout`, and the dispatcher builds the checkout on the first call
-only. The sandbox rows of the two verbs unveil the directory of the running
-file, the home paths, and the temporary directory. Neither row names a command.
+only. Neither verb runs a child, so the two rows pledge and unveil, as plan 001
+states. Each row unveils the directory of the running file, the home paths, and
+the temporary directory.
 
 ## The interface contract
 
@@ -138,8 +140,7 @@ the directory, it prints one hint line to standard error.
 The `shim` row pledges `stdio` and `rpath`. The `install` row pledges `stdio`,
 `rpath`, `wpath`, `cpath`, and `fattr`. Both rows unveil the directory of the
 running file `r`, because `shim` reads `$0` and `install` copies it. Both unveil
-`~/.local/bin`, `~/.cache/fugubench`, and the temporary directory, and neither
-names a command.
+`~/.local/bin`, `~/.cache/fugubench`, and the temporary directory.
 
 ## Files
 
@@ -216,12 +217,12 @@ operator home. A test that builds a pack passes `--out` and a test version, so
 
 - `make check` passes, and `make dist` writes the tarball, `build/fugubench`,
   and `build/install.sh`.
-- `spec/STATUS.md` sets DIST-SHIM and CLI-PROGRAM to `done`. It sets DIST-PACK
-  to `partial`, and the note names DIST-PACK-5 on perl 5.34. It sets
-  DIST-INSTALL to `partial`, and the note names DIST-INSTALL-3 and
-  FuguBSD/Website. It sets DIST-KEY to `partial`, and the note names DIST-KEY-2
-  until `update` lands. CLI-VERBS and CLI-SANDBOX stay `partial`, and each note
-  drops the two verbs.
+- `spec/STATUS.md` sets DIST-SHIM to `done`. It sets DIST-PACK to `partial`, and
+  the note names DIST-PACK-5 on perl 5.34. It sets CLI-PROGRAM to `partial`, and
+  the note names the perl 5.34 run of CLI-PROGRAM-1. It sets DIST-INSTALL to
+  `partial`, and the note names DIST-INSTALL-3 and FuguBSD/Website. It sets
+  DIST-KEY to `partial`, and the note names DIST-KEY-2 until `update` lands.
+  CLI-VERBS and CLI-SANDBOX stay `partial`, and each note drops the two verbs.
 - The change deletes this plan.
 
 ## Open questions
