@@ -84,9 +84,9 @@ takes its developer override from the environment too (DIST-SHIM-2). The
 implementation adds this sentence to DIST-UPDATE-1 with the code.
 
 **The running file can sit outside `~/.local/bin`.** The verb replaces the
-running file where it is, so its row unveils the directory of that file `rwc`.
-DIST-UPDATE-1 names that file, so the path falls in the classes of
-CLI-SANDBOX-2, and this plan changes no rule of cli.md.
+running file where it is. The row of `update` unveils nothing, so no path list
+bounds the write. Plan 001 names `update` among the verbs with a network promise
+in CLI-SANDBOX-2, so this plan changes no rule of cli.md.
 
 ## The interface contract
 
@@ -137,12 +137,10 @@ Every failure returns 1 with the reason on standard error.
 
 ### The sandbox row
 
-The row of `update` holds the file promises, the network promises `inet` and
-`dns`, and `proc exec` for the downloader child of Fugu LIB-CURL. It names
-`curl`, `wget`, and `ftp` as its commands, so the dispatcher unveils the path
-`x` of each one on `PATH`. It unveils the directory of the running file `rwc`
-and the temporary directory. It adds the paths of `Fugu::Sandbox->system_paths`
-`r` for the downloader child.
+The row of `update` pledges `stdio rpath wpath cpath fattr proc exec inet dns`.
+The file promises serve the replace, and `proc exec` serves the downloader child
+of Fugu LIB-CURL. It unveils nothing, as plan 001 states for a verb with a
+child.
 
 ## Files
 
