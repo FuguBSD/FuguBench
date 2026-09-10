@@ -5,9 +5,9 @@
 Proposed. It can land now. It depends on no other plan of this repository, and
 every other plan builds on it.
 
-Implements: CLI-PROGRAM. Implements: CLI-CHECKOUT. Implements: CLI-CONFIG.
-Implements: DIST-VERSION. CLI-PROGRAM-1 holds with the pack alone, so
-CLI-PROGRAM stays `partial` until the pack plan lands.
+Implements: CLI-PROGRAM without CLI-PROGRAM-1. Implements: CLI-CHECKOUT.
+Implements: CLI-CONFIG. Implements: DIST-VERSION. CLI-PROGRAM-1 needs the pack,
+so the row of CLI-PROGRAM is `partial` with a note that names it.
 
 Implements: CLI-VERBS. This plan lands the dispatcher, the verb table, and the
 `version` verb. Each later plan adds its verb, and the unit stays `partial`
@@ -97,25 +97,28 @@ check of its verb first. The checkout module holds the two shared checks, and a
 verb module holds its own.
 
 **The sandbox is a table.** One table in `App::FuguBench` maps each verb to its
-pledge promises, its unveil paths, and the commands that the verb runs. The
-dispatcher enters the row through Fugu LIB-SANDBOX after the option parse and
-before the verb runs. On another platform the call changes nothing. This plan
-fills the row of `version`, and each verb plan adds its row. A row that unveils
-takes the shared paths. They are the checkout root when the verb reads one,
-`~/.local/bin`, `~/.cache/fugubench`, and one temporary directory. The row also
-unveils the perl library directories of `Fugu::Sandbox->perl_lib_dirs` `r`. The
-dispatcher resolves each command of the row on `PATH` and unveils its path `x`.
-A row adds each path that a rule of its verb names. The implementation rewords
-CLI-SANDBOX-2 with the code. The new text lists the unveil classes:
+pledge promises and its unveil paths. The dispatcher enters the row through Fugu
+LIB-SANDBOX after the option parse and before the verb runs. On another platform
+the call changes nothing. This plan fills the row of `version`, and each verb
+plan adds its row. Unveil inherits across exec, and a child needs the paths of
+the system. Those are `ld.so`, the library directories, `sh` for a make recipe,
+the git helpers, the CA bundle, and the resolver files. No row can enumerate
+them. So a verb that runs a child command pledges its promises and does not
+unveil. A verb with no child pledges and unveils: `version`, `shim`, `install`,
+and `traces`. The unveil classes are:
 
-- the checkout root, the install directory of DEPS-INSTALL-6, the cache
-  directory of DIST-SHIM, and one temporary directory;
-- the perl library directories;
-- the path of each command that the verb names;
-- a path that a rule of the verb names.
+- the checkout root when the verb reads one, the install directory of
+  DEPS-INSTALL-6, the cache directory of DIST-SHIM, and one temporary directory;
+- the perl library directories of `Fugu::Sandbox->perl_lib_dirs`, `r`;
+- the directory of the running file, for `shim` and `install`;
+- the trace root, for `traces`.
 
-The new text also names `wiki`, `hook`, `deps`, `fetch`, and `update` as the
-verbs with a network promise. It states that `deps` unveils nothing.
+The row resolves after the option parse, so a row can hold a path that an option
+gives. The implementation rewords CLI-SANDBOX-2 with the code. The new text
+states both forms. A verb with a child pledges and does not unveil, and a verb
+with no child unveils the classes above. It names `wiki`, `hook`, `deps`,
+`fetch`, and `update` as the verbs with a network promise. It names the four
+verbs that unveil, so every other verb, `deps` among them, unveils nothing.
 
 **The version comes from the stamp.** Fugu REL-VERSION-2 stamps `our $VERSION`
 into every staged package at the dist build. In a checkout no stamp exists, and
@@ -136,12 +139,11 @@ and `--verbose`. The command table holds one entry for each verb module that
 this repository has.
 
 `run(@argv)` parses, resolves the sandbox row of the verb, enters it, and
-dispatches. It returns the exit code. A row names the pledge promises, the
-unveil paths, and the commands of its verb. The dispatcher resolves each command
-on `PATH` and unveils its path `x`, and it unveils the perl library directories
-`r`. A command that `PATH` lacks gets no unveil. The row resolves after the
-parse, so a row can name a path that an option gives, such as the trace root of
-`traces`.
+dispatches. It returns the exit code. A row names the pledge promises of its
+verb, and the unveil paths of a verb with no child. For a verb with a child, the
+row holds no path, and the dispatcher calls no unveil. The row resolves after
+the parse, so a row can name a path that an option gives, such as the trace root
+of `traces`.
 
 `checkout` returns the `App::FuguBench::Checkout` of the run, and builds it on
 the first call. The start is the `-C` value, or the current directory. A walk
