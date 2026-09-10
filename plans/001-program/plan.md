@@ -6,7 +6,8 @@ Proposed. It can land now. It depends on no other plan of this repository, and
 every other plan builds on it.
 
 Implements: CLI-PROGRAM. Implements: CLI-CHECKOUT. Implements: CLI-CONFIG.
-Implements: DIST-VERSION.
+Implements: DIST-VERSION. CLI-PROGRAM-1 holds with the pack alone, so
+CLI-PROGRAM stays `partial` until the pack plan lands.
 
 Implements: CLI-VERBS. This plan lands the dispatcher, the verb table, and the
 `version` verb. Each later plan adds its verb, and the unit stays `partial`
@@ -77,16 +78,18 @@ with `.toolingrc`, and that directory is the root. A key with no default stops
 the verb with a configuration error when no `.toolingrc` on the walk holds it. A
 key with a default takes the default when no file on the walk holds it. The
 directory of the file that holds a key is the home of that key. A verb names the
-anchor of each relative value. The wiki verb anchors at the home of
-`wiki.origin`, and the worktree verb anchors at the root. A clone under
+anchor of each relative value. A `wiki.` value anchors at the home of
+`wiki.origin`, and `worktree.base` anchors at the root. A clone under
 `Projects/` holds no `wiki.` key, so the home of `wiki.origin` is the workspace.
-The implementation adds the home sentence to CLI-CONFIG-2 with the code.
+The implementation adds the home rule and the two anchors to CLI-CONFIG-2 with
+the code. It changes the `wiki.dir` row of the table to "under the home of
+`wiki.origin`", and CLI-CHECKOUT-2 to "holds no `wiki.origin` key".
 
 **The walk runs on demand.** The dispatcher builds the checkout on the first
 call of `checkout`, and a verb that reads no checkout needs no `.toolingrc`. The
-verbs `version`, `shim`, `install`, and `update` read none, so `curl | sh` works
-in a home without one. The implementation adds those verbs to the exception of
-CLI-CHECKOUT-5 with the code.
+verbs `version`, `shim`, `install`, `update`, and `fetch` read none, so
+`curl | sh` works in a home without one. The implementation adds those verbs to
+the exception of CLI-CHECKOUT-5 with the code.
 
 **A shape check guards every value.** A directory value is a relative path with
 no `..` segment. A URL holds a scheme. A name that reaches a command passes the
@@ -94,12 +97,25 @@ check of its verb first. The checkout module holds the two shared checks, and a
 verb module holds its own.
 
 **The sandbox is a table.** One table in `App::FuguBench` maps each verb to its
-pledge promises and to its unveil paths. The dispatcher calls Fugu LIB-SANDBOX
-with the row of the verb before the verb runs. On another platform the call
-changes nothing. This plan fills the row of `version`, and each verb plan adds
-its row. The unveil list holds the checkout root, `~/.local/bin`,
-`~/.cache/fugubench`, and one temporary directory. It adds the paths of
-`Fugu::Sandbox->perl_lib_dirs` and `Fugu::Sandbox->system_paths`.
+pledge promises, its unveil paths, and the commands that the verb runs. The
+dispatcher enters the row through Fugu LIB-SANDBOX after the option parse and
+before the verb runs. On another platform the call changes nothing. This plan
+fills the row of `version`, and each verb plan adds its row. A row that unveils
+takes the shared paths. They are the checkout root when the verb reads one,
+`~/.local/bin`, `~/.cache/fugubench`, and one temporary directory. The row also
+unveils the perl library directories of `Fugu::Sandbox->perl_lib_dirs` `r`. The
+dispatcher resolves each command of the row on `PATH` and unveils its path `x`.
+A row adds each path that a rule of its verb names. The implementation rewords
+CLI-SANDBOX-2 with the code. The new text lists the unveil classes:
+
+- the checkout root, the install directory of DEPS-INSTALL-6, the cache
+  directory of DIST-SHIM, and one temporary directory;
+- the perl library directories;
+- the path of each command that the verb names;
+- a path that a rule of the verb names.
+
+The new text also names `wiki`, `hook`, `deps`, `fetch`, and `update` as the
+verbs with a network promise. It states that `deps` unveils nothing.
 
 **The version comes from the stamp.** Fugu REL-VERSION-2 stamps `our $VERSION`
 into every staged package at the dist build. In a checkout no stamp exists, and
@@ -119,9 +135,13 @@ The executable loads `App::FuguBench` and exits with the return value of
 and `--verbose`. The command table holds one entry for each verb module that
 this repository has.
 
-`run(@argv)` parses, enters the sandbox row of the verb, and dispatches. It
-returns the exit code. The row resolves after the parse, so a row can name a
-path that an option gives, such as the trace root of `traces`.
+`run(@argv)` parses, resolves the sandbox row of the verb, enters it, and
+dispatches. It returns the exit code. A row names the pledge promises, the
+unveil paths, and the commands of its verb. The dispatcher resolves each command
+on `PATH` and unveils its path `x`, and it unveils the perl library directories
+`r`. A command that `PATH` lacks gets no unveil. The row resolves after the
+parse, so a row can name a path that an option gives, such as the trace root of
+`traces`.
 
 `checkout` returns the `App::FuguBench::Checkout` of the run, and builds it on
 the first call. The start is the `-C` value, or the current directory. A walk
@@ -164,21 +184,21 @@ to standard output and returns 0.
 
 ## Files
 
-| File                             | Change                                                             |
-| -------------------------------- | ------------------------------------------------------------------ |
-| `bin/fugubench`                  | New: the executable                                                |
-| `lib/App/FuguBench.pm`           | New: the dispatcher and the sandbox table                          |
-| `lib/App/FuguBench.pod`          | New: the contract                                                  |
-| `lib/App/FuguBench/Checkout.pm`  | New: the walk and the configuration reader                         |
-| `lib/App/FuguBench/Checkout.pod` | New: the contract                                                  |
-| `lib/App/FuguBench/Version.pm`   | New: the version verb                                              |
-| `lib/App/FuguBench/Version.pod`  | New: the contract                                                  |
-| `t/fugubench/cli.t`              | New: the channels, the codes, and the help                         |
-| `t/fugubench/checkout.t`         | New: the walk, the keys, and the shape checks                      |
-| `t/fugubench/conventions.t`      | New: the pragma block and the Fugu module set                      |
-| `mk/local.mk`                    | `TEST_GLOBS` gains `t/fugubench/*.t`                               |
-| `spec/cli.md`                    | The home sentence of CLI-CONFIG-2, and the verbs of CLI-CHECKOUT-5 |
-| `spec/STATUS.md`                 | The rows of this plan, and `lib` in the code roots of `dist.md`    |
+| File                             | Change                                                                                                                                             |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bin/fugubench`                  | New: the executable                                                                                                                                |
+| `lib/App/FuguBench.pm`           | New: the dispatcher and the sandbox table                                                                                                          |
+| `lib/App/FuguBench.pod`          | New: the contract                                                                                                                                  |
+| `lib/App/FuguBench/Checkout.pm`  | New: the walk and the configuration reader                                                                                                         |
+| `lib/App/FuguBench/Checkout.pod` | New: the contract                                                                                                                                  |
+| `lib/App/FuguBench/Version.pm`   | New: the version verb                                                                                                                              |
+| `lib/App/FuguBench/Version.pod`  | New: the contract                                                                                                                                  |
+| `t/fugubench/cli.t`              | New: the channels, the codes, and the help                                                                                                         |
+| `t/fugubench/checkout.t`         | New: the walk, the keys, and the shape checks                                                                                                      |
+| `t/fugubench/conventions.t`      | New: the pragma block and the Fugu module set                                                                                                      |
+| `mk/local.mk`                    | `TEST_GLOBS` gains `t/fugubench/*.t`                                                                                                               |
+| `spec/cli.md`                    | The rewording of CLI-SANDBOX-2, the home rule and the anchors of CLI-CONFIG-2, the `wiki.dir` row, CLI-CHECKOUT-2, and the verbs of CLI-CHECKOUT-5 |
+| `spec/STATUS.md`                 | The rows of this plan, and `lib` in the code roots of `dist.md`                                                                                    |
 
 ## Tests
 
@@ -222,9 +242,10 @@ outside its temporary tree.
 
 - `make check` passes, with the new tier in `make test`.
 - The three tests pass on the perl of the host, with the installed Fugu.
-- `spec/STATUS.md` sets CLI-PROGRAM, CLI-CHECKOUT, CLI-CONFIG, and DIST-VERSION
-  to `done`. It sets CLI-VERBS, CLI-FUGU, and CLI-SANDBOX to `partial`, and each
-  note names the absent part.
+- `spec/STATUS.md` sets CLI-CHECKOUT, CLI-CONFIG, and DIST-VERSION to `done`. It
+  sets CLI-PROGRAM to `partial`, and the note names CLI-PROGRAM-1. It sets
+  CLI-VERBS, CLI-FUGU, and CLI-SANDBOX to `partial`, and each note names the
+  absent part.
 - The change deletes this plan.
 
 ## Open questions
