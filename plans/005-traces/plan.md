@@ -16,10 +16,10 @@ Implements: CLI-SANDBOX. This plan adds the row of `traces`, with the trace root
 as a read-only path. The unit stays `partial` until the last verb lands.
 
 Implements: CLI-CONFORMANCE without CLI-CONFORMANCE-2. This plan ports the
-Workspace test `t/ci/traces.t`, with the invocation changed and nothing else.
-The tests of `worktree.pl` and `wiki.pl` come with their verbs, and the dry-run
-trace of `deps` comes with the installer. The unit stays `partial` until those
-plans land.
+Workspace test `t/ci/traces.t`, with the invocation and the fixture changed, as
+the CLI-CONFORMANCE-1 text of plan 002 allows. The tests of `worktree.pl` and
+`wiki.pl` come with their verbs, and the dry-run trace of `deps` comes with the
+installer. The unit stays `partial` until those plans land.
 
 ## Purpose
 
@@ -66,13 +66,13 @@ worktree counts as an edit of the checkout. The verb keeps that: the boundary is
 the path of TRACE-NAME-1, and `--name` does not change it. The implementation
 adds the words "of TRACE-NAME-1" to TRACE-PANEL-3 with the code.
 
-**The sandbox row needs the trace root.** `traces` runs no child command, and it
-needs no network promise (CLI-SANDBOX-2). It reads the trace root,
-`~/.claude/projects/` or the `--root` value, and CLI-SANDBOX-2 does not list
-that path. The row of `traces` adds the trace root as a read-only path. The row
-depends on a parsed option, so the dispatcher resolves the row after the parse
-and before the entry. The implementation adds the trace root to the unveil list
-of CLI-SANDBOX-2 with the code, as a read-only path of the `traces` verb.
+**The sandbox row needs the trace root.** `traces` runs no child command, so its
+row names no command, and it needs no network promise (CLI-SANDBOX-2). It reads
+the trace root, `~/.claude/projects/` or the `--root` value, and the row adds
+that path `r`. TRACE-NAME-3 names the path, so it falls in the classes of
+CLI-SANDBOX-2, and this plan changes no rule of cli.md. The row depends on a
+parsed option, so the dispatcher resolves the row after the parse and before the
+entry.
 
 **The record filter is the contract.** A full parse of every record costs
 minutes over a long history (TRACE-USAGE-2). The verb decodes each record until
@@ -86,13 +86,14 @@ decode is no record.
 (CLI-PROGRAM-1), and JSON::PP is one. Fugu holds no JSON module, so no CLI-FUGU
 rule changes.
 
-**The test comes over with its invocation changed.** CLI-CONFORMANCE-1 holds the
-test to the assertions of the script. Two places of the test name the script:
-the `_traces` helper, and the last test, which copies the script into a nested
-marker path. The helper runs `bin/fugubench -C <checkout> traces` instead. The
-last test replaces the copy with a `-C` directory that holds the marker twice
-and its own `.toolingrc`. The boundary sessions build their paths from the `-C`
-directory, so no assertion holds an operator path.
+**The test comes over with its invocation and its fixture changed.**
+CLI-CONFORMANCE-1, as plan 002 rewords it, holds the test to the assertions of
+the script. Two places of the test name the script: the `_traces` helper, and
+the last test, which copies the script into a nested marker path. The helper
+runs `bin/fugubench -C <checkout> traces` instead. The last test replaces the
+copy with a `-C` directory that holds the marker twice and its own `.toolingrc`.
+The boundary sessions build their paths from the `-C` directory, so no assertion
+holds an operator path.
 
 ## The interface contract
 
@@ -112,8 +113,8 @@ matches the name, it prints `no session of <name>` and exits 0.
 
 ### The sandbox row
 
-The row of `traces` holds the read promises and no network promise. Its unveil
-list holds the paths of CLI-SANDBOX-2 and the trace root, read-only.
+The row of `traces` holds the read promises, no network promise, and no command.
+Its unveil list holds the shared paths of plan 001 and the trace root `r`.
 
 ## Files
 
@@ -123,7 +124,6 @@ list holds the paths of CLI-SANDBOX-2 and the trace root, read-only.
 | `lib/App/FuguBench/Traces.pod` | New: the contract                              |
 | `lib/App/FuguBench.pm`         | The `traces` entry and its sandbox row         |
 | `t/fugubench/traces.t`         | New: the port of the Workspace `t/ci/traces.t` |
-| `spec/cli.md`                  | The trace root in CLI-SANDBOX-2                |
 | `spec/traces.md`               | The boundary words of TRACE-PANEL-3            |
 | `spec/STATUS.md`               | The rows of this plan                          |
 
@@ -149,10 +149,11 @@ An implementer takes the packages in order. Each one ends in a passing
 ## Tests
 
 `t/fugubench/traces.t` is the Workspace test `t/ci/traces.t` with the invocation
-changed and nothing else. It runs `bin/fugubench` as a child with `-Ilib`. It
-builds its fixture in one temporary tree: a checkout directory with an empty
-`.toolingrc`, and a trace root beside it. No test reads the operator home, and
-no test writes outside the tree.
+and the fixture changed, as the CLI-CONFORMANCE-1 text of plan 002 allows. It
+runs `bin/fugubench` as a child with `-Ilib`. It builds its fixture in one
+temporary tree: a checkout directory with an empty `.toolingrc`, and a trace
+root beside it. No test reads the operator home, and no test writes outside the
+tree.
 
 The fixture root holds the checkout, one worktree of it, one project clone in
 it, and one sibling checkout. The checkout holds the sessions of the Workspace
