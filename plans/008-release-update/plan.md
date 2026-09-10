@@ -5,24 +5,16 @@
 Proposed. It lands last, after each wait below. Nothing lands now.
 
 - Plan 007 of this repository: the pack, `install.sh`, and the keys module
-  `App::FuguBench::Keys`. The verb verifies with those keys, and the workflow
-  publishes `build/fugubench` and `build/install.sh` that `make dist` writes.
-- Tooling, two plans. The shared workflow `perl-release.yml` publishes the two
-  tarballs and the signed manifest only. One plan gives it an input that names
-  extra files under `build/` to publish and to list in `SHA256`. The other plan
-  makes `scripts/dist` take the perl floor of the repository in place of the
-  fixed `5.036`. Tooling designs both.
-- Repositories: FuguBench must join `release_repos` of the OpenTofu
-  configuration, which binds the `release` environment with the PAUSE secrets.
-  Repositories SET-RELEASE-1 binds that list to a repository with a
-  `release.yml`, so the name is absent today. This plan lands `release.yml`
-  first. Repositories then adds the name and applies.
-- Fugu: a release that carries Fugu LIB-CURL and Fugu LIB-ED25519. The latest
-  release, 0.4.0, lacks both. Plan 006 holds the same wait.
-- Website: FuguBSD/Website serves `/get` (DIST-INSTALL-3, cited in plan 007).
-  The release note of this plan names that command.
+  `App::FuguBench::Keys`.
+- Tooling: an asset input of the shared workflow `perl-release.yml`, and the
+  perl floor of `scripts/dist`.
+- Repositories: the `release_repos` entry of FuguBench.
+- Fugu: a release that carries Fugu LIB-CURL and Fugu LIB-ED25519.
+- Website: the `/get` address of DIST-INSTALL-3.
 
-Implements: DIST-ASSETS. Implements: DIST-UPDATE.
+Implements: DIST-ASSETS. Implements: DIST-UPDATE. Implements: DIST-KEY. The
+`update` verb verifies with the embedded keys alone, so DIST-KEY-2 holds with
+this plan.
 
 Implements: CLI-VERBS. This plan lands the `update` verb, the last verb of the
 table.
@@ -91,10 +83,10 @@ not an option: the usage stays the two options that DIST-UPDATE names. The shim
 takes its developer override from the environment too (DIST-SHIM-2). The
 implementation adds this sentence to DIST-UPDATE-1 with the code.
 
-**The running file can sit outside `~/.local/bin`.** CLI-SANDBOX-2 names four
-paths and nothing else. The verb replaces the running file where it is, so its
-row unveils the directory of that file. The implementation adds this sentence to
-CLI-SANDBOX-2 with the code.
+**The running file can sit outside `~/.local/bin`.** The verb replaces the
+running file where it is, so its row unveils the directory of that file `rwc`.
+DIST-UPDATE-1 names that file, so the path falls in the classes of
+CLI-SANDBOX-2, and this plan changes no rule of cli.md.
 
 ## The interface contract
 
@@ -146,9 +138,11 @@ Every failure returns 1 with the reason on standard error.
 ### The sandbox row
 
 The row of `update` holds the file promises, the network promises `inet` and
-`dns`, and the child promises of the downloader of Fugu LIB-CURL. It unveils the
-directory of the running file and the temporary directory, and it adds the paths
-of `Fugu::Sandbox->system_paths` for the downloader command.
+`dns`, and `proc exec` for the downloader child of Fugu LIB-CURL. It names
+`curl`, `wget`, and `ftp` as its commands, so the dispatcher unveils the path
+`x` of each one on `PATH`. It unveils the directory of the running file `rwc`
+and the temporary directory. It adds the paths of `Fugu::Sandbox->system_paths`
+`r` for the downloader child.
 
 ## Files
 
@@ -161,7 +155,6 @@ of `Fugu::Sandbox->system_paths` for the downloader command.
 | `t/fugubench/update.t`          | New: the loopback tests                         |
 | `t/fugubench/fixtures/update/`  | New: the fixture key pair and two release trees |
 | `.gitleaksignore`               | The fixture secret key, when the gate flags it  |
-| `spec/cli.md`                   | The unveil sentence of CLI-SANDBOX-2            |
 | `spec/dist.md`                  | The environment sentence of DIST-UPDATE-1       |
 | `spec/STATUS.md`                | The rows of this plan                           |
 
@@ -222,8 +215,9 @@ Cases:
   `~/.local/bin`. Then `fugubench update` replaces it with the release, and
   `fugubench version` prints `0.1.0`.
 - `spec/STATUS.md` sets DIST-ASSETS and DIST-UPDATE to `done`, with a link to
-  `release.yml` and to the test. It sets CLI-VERBS and CLI-SANDBOX to `done`,
-  because this plan adds the last verb and the last row.
+  `release.yml` and to the test. It sets DIST-KEY to `done`, because `update`
+  completes DIST-KEY-2. It sets CLI-VERBS and CLI-SANDBOX to `done`, because
+  this plan adds the last verb and the last row.
 - The change deletes this plan.
 
 ## Open questions
