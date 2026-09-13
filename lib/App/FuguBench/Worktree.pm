@@ -837,7 +837,16 @@ sub _copy_file ( $app, $src, $dst )
 		$log->error( 'cannot copy %s -> %s: %s', $src, $dst, $! );
 		return 0;
 	}
-	chmod $stat[2] & 07777, $dst if @stat;
+	if ( @stat && chmod( $stat[2] & 07777, $dst ) != 1 ) {
+		$log->error( 'cannot set the mode of %s: %s', $dst, $! );
+
+		# A copy of a credential file at the mode of the umask
+		# is wider than the source, so it must not stay.
+		unlink $dst
+		    or $log->error( 'cannot remove %s: %s', $dst, $! );
+
+		return 0;
+	}
 	$log->notice( 'copied %s -> %s', $src, $dst );
 
 	return 1;
