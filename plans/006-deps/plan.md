@@ -2,19 +2,15 @@
 
 ## Status
 
-Proposed. It lands after plan 001, in four work packages. Package 1 needs no
-download module, so it can land as soon as plan 001 lands. Packages 2, 3, and 4
-wait on a Fugu release that carries Fugu LIB-CURL and Fugu LIB-ED25519. Fugu
-plans 009 and 010 are merged as plans and not implemented, and the Fugu release
-0.4.0 lacks both modules. The manifest of this repository names
-`releases/latest/download/Fugu.tar.gz`, so a new Fugu tag is the dependency.
-After the last package, Tooling ships the shim in place of `scripts/deps` and
+In progress. Package 1 landed the manifest, the alias expansion, and the dry-run
+oracle. Packages 2, 3, and 4 remain. The Fugu release 0.5.0 carries Fugu
+LIB-CURL and Fugu LIB-ED25519, so no package waits on another repository. After
+the last package, Tooling ships the shim in place of `scripts/deps` and
 `scripts/ftp` in a plan of Tooling (D-09). Each consumer then drops its signify
 package from the `tool` environment (DEPS-TIER-8).
 
-Implements: DEPS-MANIFEST. Implements: DEPS-INSTALL. Implements: DEPS-ALIAS.
-Implements: DEPS-TIER. Implements: DEPS-KEYS. Implements: DEPS-SUMS. Implements:
-DEPS-FETCH.
+Implements: DEPS-MANIFEST. Implements: DEPS-INSTALL. Implements: DEPS-TIER.
+Implements: DEPS-KEYS. Implements: DEPS-SUMS. Implements: DEPS-FETCH.
 
 Implements: CLI-VERBS. This plan adds the `deps` verb and the `fetch` verb. The
 unit stays `partial` until the last verb plan lands.
@@ -24,10 +20,6 @@ Implements: CLI-SANDBOX. This plan adds the rows of `deps` and `fetch`.
 Implements: CLI-FUGU. This plan adds the last two modules of the set: Fugu
 LIB-SIGNIFY with the engine of Fugu LIB-ED25519, and Fugu LIB-CURL. The unit
 goes to `done`.
-
-Implements: CLI-CONFORMANCE without CLI-CONFORMANCE-1. This plan lands the
-dry-run oracle of CLI-CONFORMANCE-2. Plans 002, 003, and 005 land the three
-script test ports.
 
 ## Purpose
 
@@ -175,11 +167,6 @@ fixture is a copy, so a later manifest change of a consumer does not reach it.
 An implementer takes one package at a time, in this order. Each package trims
 the citations that it completes, and the last one deletes the plan.
 
-1. **The manifest and the trace.** The manifest reader and its validation, the
-   alias expansion, the type order, and the `HOME` check. The dry-run trace, and
-   the conformance oracle with the fixtures. No network, and no `Fugu::Curl`.
-   The acceptance check is `t/fugubench/deps.t` and
-   `t/fugubench/deps-conformance.t` green on the installed Fugu 0.4.0.
 2. **The tiers and the fetch verb.** The recorded tier, the signify tier, the
    key set, the digest file through the Fugu reader and writer, and
    `App::FuguBench::Fetch`. The acceptance check is `t/fugubench/deps-tier.t`
@@ -244,9 +231,6 @@ exits 1.
 ## Acceptance
 
 - `make check` passes after each package, and the new tests run in `make test`.
-- Package 1 sets DEPS-ALIAS to `done`, and DEPS-MANIFEST and CLI-CONFORMANCE to
-  `partial`. The notes name the installs and CLI-CONFORMANCE-1. The CLI-VERBS
-  and CLI-SANDBOX notes name the verbs that wait.
 - Package 2 sets DEPS-TIER, DEPS-KEYS, DEPS-FETCH, and CLI-FUGU to `done`.
   Package 3 sets DEPS-MANIFEST and DEPS-INSTALL to `done`, and package 4 sets
   DEPS-SUMS to `done`.

@@ -32,6 +32,7 @@ use Fugu::Process;
 use Fugu::Sandbox;
 
 use App::FuguBench::Checkout;
+use App::FuguBench::Deps;
 use App::FuguBench::Version;
 use App::FuguBench::Worktree;
 
@@ -55,6 +56,7 @@ use App::FuguBench::Worktree;
 my @VERBS = (
 	[ 'version',  'App::FuguBench::Version' ],
 	[ 'worktree', 'App::FuguBench::Worktree' ],
+	[ 'deps',     'App::FuguBench::Deps' ],
 );
 
 # The sandbox row of each verb (CLI-SANDBOX). A row names the pledge
@@ -69,12 +71,19 @@ my @VERBS = (
 # `worktree` runs git and make, and no row can name each file that
 # they open. So the row unveils nothing (CLI-SANDBOX-2). Its `list`
 # subcommand writes no file, so it drops the write promises.
+#
+# The install of `deps` runs a package manager, cpanm, and the
+# commands of an archive, and each one writes outside every path of a
+# row. So the row unveils nothing either. The file promises cover the
+# manifest read and the digest file, `proc exec` covers each child,
+# and `inet dns` covers each download.
 my %SANDBOX = (
 	version  => { promises => 'stdio' },
 	worktree => {
 		promises    => 'stdio rpath wpath cpath fattr proc exec',
 		subcommands => { list => 'stdio rpath proc exec' },
 	},
+	deps => { promises => 'stdio rpath wpath cpath proc exec inet dns' },
 );
 
 # The global options, in the form of Fugu::CLI. new gives the table
@@ -204,6 +213,17 @@ sub error ($self)
 sub child ($self)
 {
 	return $self->{child};
+}
+
+# $self->start:
+#	The start directory of the run: the -C value, or the current
+#	directory. A verb that reads a path relative to the start, and
+#	that walks up to no checkout, reads it here (CLI-CHECKOUT-5).
+#	`deps` is that verb, and a guest runs it out of an extracted
+#	tarball that holds no .toolingrc.
+sub start ($self)
+{
+	return $self->{cli}->option('C') // Cwd::getcwd();
 }
 
 # $self->checkout($checkout):

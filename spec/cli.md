@@ -189,4 +189,7 @@ The program replaces four scripts that have tests, and the tests come with it.
 - **CLI-CONFORMANCE-2** — The dry-run trace of `deps` over the manifests of
   every consumer must equal the trace of the synced `scripts/deps`, line for
   line. The rule holds until Tooling retires the script. The fixtures are copies
-  of the consumer manifests and digest files under `t/`.
+  of the consumer manifests and digest files under `t/`. The verb downloads
+  in-process, so the test must replace the path of the `ftp` helper with
+  `fugubench fetch`, and each temporary directory with one token. It must
+  compare the `+ ` lines, and it must change nothing else.

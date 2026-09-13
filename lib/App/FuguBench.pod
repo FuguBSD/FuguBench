@@ -56,6 +56,14 @@ C<cli> returns the L<Fugu::CLI> dispatcher. A verb body reads its
 options with C<< $app->cli->option($name) >>, and it reports with
 C<< $app->cli->log >>.
 
+=head2 start
+
+C<start> returns the start directory of the run: the C<-C> value, or
+the current directory. A verb that reads a path relative to the
+start, and that walks up to no checkout, reads it here. C<deps> is
+that verb: it reads F<deps/E<lt>OSE<gt>.txt> there, and a guest runs
+it out of an extracted tarball that holds no F<.toolingrc>.
+
 =head2 checkout
 
 C<checkout> returns the L<App::FuguBench::Checkout> of the run. The
@@ -135,11 +143,17 @@ child opens. So the row unveils nothing. Its C<list> subcommand writes
 no file, so that subcommand drops the write promises. No row of this
 distribution unveils a path.
 
+The install of C<deps> runs a package manager, cpanm, and the
+commands of an archive, and each one writes outside every path of a
+row. So its row unveils nothing either. The file promises cover the
+manifest read and the digest file, C<proc exec> covers each child,
+and C<inet dns> covers each download.
+
 =head1 RETURN VALUES
 
 C<new> returns a dispatcher. C<run> returns an exit code. C<cli>
-returns the L<Fugu::CLI> dispatcher. C<checkout> returns a checkout
-or C<undef>.
+returns the L<Fugu::CLI> dispatcher. C<start> returns a directory
+path. C<checkout> returns a checkout or C<undef>.
 
 C<command> returns the captured standard output of the child, and
 C<undef> with the reason in C<error>. A child that writes nothing
@@ -150,9 +164,9 @@ C<child> returns a pid or C<undef>.
 
 =head1 SEE ALSO
 
-L<App::FuguBench::Checkout>, L<App::FuguBench::Worktree>,
-L<Fugu::CLI>, L<Fugu::File>, L<Fugu::Log>, L<Fugu::Process>,
-L<Fugu::Sandbox>
+L<App::FuguBench::Checkout>, L<App::FuguBench::Deps>,
+L<App::FuguBench::Worktree>, L<Fugu::CLI>, L<Fugu::File>,
+L<Fugu::Log>, L<Fugu::Process>, L<Fugu::Sandbox>
 
 =head1 AUTHORS
 

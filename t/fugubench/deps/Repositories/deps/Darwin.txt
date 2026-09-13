@@ -1,0 +1,11 @@
+# External dependencies of Repositories. scripts/deps installs each line.
+# The secret gate of make check runs gitleaks, so the tool environment
+# installs it before every other environment.
+tool bin gitleaks https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_{os}_{arch}.tar.gz gitleaks
+# The Scaleway CLI manages the Scaleway resources.
+runtime bin scw https://github.com/scaleway/scaleway-cli/releases/download/v2.61.0/scaleway-cli_2.61.0_{os}_{arch}
+# The GitHub CLI supplies the token for the GitHub provider. The macOS
+# release ships a zip, so this line differs from the Linux line.
+runtime bin gh https://github.com/cli/cli/releases/download/v2.97.0/gh_2.97.0_{os}_{arch}.zip gh_2.97.0_{os}_{arch}/bin/gh
+# OpenTofu manages the repository settings.
+runtime bin tofu https://github.com/opentofu/opentofu/releases/download/v1.10.6/tofu_1.10.6_{os}_{arch}.zip tofu
