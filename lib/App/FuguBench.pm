@@ -266,12 +266,14 @@ sub child ($self)
 #	verb, and it comes one time.
 #
 #	With an argument the method sets the checkout, for a verb that
-#	reads its start from a payload.
+#	reads its start from a payload. The argument drops the report
+#	of a failed walk, so no later call writes it.
 sub checkout ( $self, $checkout = undef )
 {
 	if ( defined $checkout ) {
 		$self->{checkout} = $checkout;
 		$self->{walked}   = 1;
+		delete $self->{missing};
 		return $checkout;
 	}
 

@@ -74,7 +74,8 @@ verb that rejects its argument list reports the usage, and no
 configuration error.
 
 C<checkout($checkout)> sets the checkout, for a verb that reads its
-start from a payload.
+start from a payload. The argument drops the report of a failed walk,
+so no later call writes it.
 
 =head2 command
 
