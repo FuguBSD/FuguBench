@@ -65,8 +65,9 @@ my @VERBS = (
 # promises of the row to every other one.
 #
 # `version` opens no file, so its row holds `stdio` alone, and
-# `stdio` denies open(2). The first verb that opens a file adds the
-# unveil of CLI-SANDBOX-2, and the paths of its row.
+# `stdio` denies open(2). The three verbs that unveil are `shim`,
+# `install`, and `traces` (CLI-SANDBOX-2). No row of this table
+# unveils a path.
 #
 # `wiki` and `worktree` run git, and no row can name each file that
 # git opens. So each row unveils nothing (CLI-SANDBOX-2). git pushes,
