@@ -243,9 +243,9 @@ sub start ($self)
 
 # $self->checkout($checkout):
 #	The checkout of the run. Without an argument the walk runs on
-#	the first call, from the -C value or from the current
-#	directory. A verb that reads no checkout never starts it, so
-#	the program runs in a home with no .toolingrc.
+#	the first call, from the start directory of start(). A verb
+#	that reads no checkout never starts it, so the program runs in
+#	a home with no .toolingrc.
 #
 #	The method returns undef when no .toolingrc sits above the
 #	start, and it names the start directory in the log. The verb
@@ -261,7 +261,7 @@ sub checkout ( $self, $checkout = undef )
 	}
 	return $self->{checkout} if defined $self->{checkout};
 
-	my $start = $self->{cli}->option('C') // Cwd::getcwd();
+	my $start = $self->start;
 	$self->{checkout} = App::FuguBench::Checkout->new( start => $start );
 	$self->{cli}->log->error( 'no .toolingrc above %s', $start )
 	    unless defined $self->{checkout};

@@ -67,9 +67,9 @@ it out of an extracted tarball that holds no F<.toolingrc>.
 =head2 checkout
 
 C<checkout> returns the L<App::FuguBench::Checkout> of the run. The
-walk runs on the first call, from the C<-C> value or from the current
-directory. A verb that reads no checkout never starts it, so
-C<fugubench version> runs in a home with no F<.toolingrc>.
+walk runs on the first call, from the directory of C<start>. A verb
+that reads no checkout never starts it, so C<fugubench version> runs
+in a home with no F<.toolingrc>.
 
 The method returns C<undef> when no F<.toolingrc> sits above the
 start, and it names the start directory in the log. The verb then
