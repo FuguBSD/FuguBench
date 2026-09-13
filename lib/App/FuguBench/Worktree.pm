@@ -23,7 +23,8 @@ use experimental 'signatures';
 no feature qw(indirect multidimensional bareword_filehandles);
 
 use Cwd            ();
-use File::Basename qw(dirname);
+use File::Basename qw(basename dirname);
+use File::Copy     ();
 use File::Find     ();
 use File::Path     ();
 use File::Spec     ();
@@ -35,8 +36,8 @@ use Fugu::Process;
 #
 # The verb makes, removes, and lists the worktrees of one checkout,
 # and it clones the gitignored trees of that checkout into a
-# worktree. This change holds the subcommands create, remove, and
-# list. An unknown subcommand gives the usage error.
+# worktree. The subcommands are create, remove, list, and clone. An
+# unknown subcommand gives the usage error.
 #
 # The root of the verb is the main checkout, and -C names it. A
 # linked worktree holds a .git file, not a directory, so the verb
@@ -55,19 +56,30 @@ use Fugu::Process;
 # session captures its work in the clones inside its worktree, so
 # remove refuses a worktree that holds work at risk. The option
 # --force overrides that refusal.
+#
+# Clone is the tool of a bootstrap target. It copies the gitignored
+# paths of the main checkout into the current directory, with no
+# network. A destination that exists stays as it is, so a second run
+# repairs a bootstrap that stopped early.
 
-# The subcommands of this change. An unknown word gives the usage
-# error, and a subcommand of a later change is an unknown word.
+# The subcommands of the verb. An unknown word gives the usage error.
 my %SUBCOMMAND = (
 	create => \&_create,
 	remove => \&_remove,
 	list   => \&_list,
+	clone  => \&_clone,
 );
 
 # The shape of a worktree name (WT-CREATE-2). The first character is
 # a letter or a digit: a name that starts with a dash reaches git as
 # an option.
 my $NAME = qr{\A[A-Za-z0-9][A-Za-z0-9._/-]*\z};
+
+# The shape of a path of clone (WT-CLONE-5). A gitignored path can
+# start with a dot, such as .env, so the first character takes a dot
+# and an underscore too. It takes no dash, which reaches git as an
+# option.
+my $PATH = qr{\A[A-Za-z0-9._][A-Za-z0-9._/-]*\z};
 
 # The format of one line of the listing (WT-LIST-1): the name, the
 # age in days, and the state.
@@ -82,8 +94,9 @@ use constant MAKEFILES => qw(GNUmakefile Makefile makefile);
 sub command ( $, $ )
 {
 	return {
-		summary => 'create, remove, or list a worktree of the checkout',
-		usage   => 'create <name> | remove [--force] <name> | list',
+		summary => 'create, remove, list, or clone into a worktree',
+		usage   => 'create <name> | remove [--force] <name> | list'
+		    . ' | clone <path>...',
 		options => {
 			force => 'remove a worktree that holds work at risk'
 		},
@@ -105,36 +118,50 @@ sub _run ( $app, @argv )
 	return $sub->( $app, @argv );
 }
 
-# _setup($app):
-#	The exit code, the main checkout, and the worktree base, in
-#	that order. The code is EXIT_SUCCESS when the other two hold
-#	a value, and the method reports every failure itself.
+# _root($app):
+#	The exit code and the main checkout, in that order. The code
+#	is EXIT_SUCCESS when the root holds a value, and the method
+#	reports every failure itself.
 #
 #	The path of the root comes from abs_path, because git reports
 #	the resolved path of a worktree. The two must agree, or the
 #	listing finds no worktree of the base.
+sub _root ($app)
+{
+	my $checkout = $app->checkout
+	    or return Fugu::CLI::EXIT_CONFIG_ERROR();
+	my $root = Cwd::abs_path( $checkout->root );
+
+	# A linked worktree holds a .git file, and the main checkout
+	# holds a .git directory.
+	unless ( defined $root && -d "$root/.git" ) {
+		$app->cli->log->error( 'not the main checkout: %s',
+			$checkout->root );
+		return EXIT_ERROR;
+	}
+
+	return ( EXIT_SUCCESS, $root );
+}
+
+# _setup($app):
+#	The exit code, the main checkout, and the worktree base, in
+#	that order. Create, remove, and list read the base, and clone
+#	does not, so clone calls _root alone and gives no
+#	configuration error of the base.
 #
 #	The base is the worktree.base key, and it resolves against the
 #	root (CLI-CONFIG-2). A clone under Projects/ can inherit the
 #	key from the workspace, and its worktrees belong to the clone.
 sub _setup ($app)
 {
-	my $checkout = $app->checkout
-	    or return Fugu::CLI::EXIT_CONFIG_ERROR();
-	my $log  = $app->cli->log;
-	my $root = Cwd::abs_path( $checkout->root );
+	my ( $code, $root ) = _root($app);
+	return $code if $code != EXIT_SUCCESS;
 
-	# A linked worktree holds a .git file, and the main checkout
-	# holds a .git directory.
-	unless ( defined $root && -d "$root/.git" ) {
-		$log->error( 'not the main checkout: %s', $checkout->root );
-		return EXIT_ERROR;
-	}
-
-	my ($value) = $checkout->config('worktree.base');
-	my $dir = $checkout->dir_value($value);
+	my $checkout = $app->checkout;
+	my ($value)  = $checkout->config('worktree.base');
+	my $dir      = $checkout->dir_value($value);
 	unless ( defined $dir ) {
-		$log->error( 'worktree.base: %s', $checkout->error );
+		$app->cli->log->error( 'worktree.base: %s', $checkout->error );
 		return Fugu::CLI::EXIT_CONFIG_ERROR();
 	}
 
@@ -551,6 +578,232 @@ sub _repos_in ($wt)
 	);
 
 	return @repos;
+}
+
+# _clone($app, @argv):
+#	Copy the gitignored paths of the main checkout into the
+#	current directory, with no network and no gh (WT-CLONE-1). A
+#	bootstrap target of a worktree names the paths.
+#
+#	Each path passes the shape check before any work starts, so
+#	one bad path stops the run and changes nothing (CLI-PROGRAM-6).
+#	The subcommand writes inside the current directory only, and
+#	in the main checkout itself it changes nothing (WT-CLONE-6).
+sub _clone ( $app, @argv )
+{
+	return $app->cli->command_usage_error('worktree') unless @argv;
+
+	my ( $code, $root ) = _root($app);
+	return $code if $code != EXIT_SUCCESS;
+
+	my $log = $app->cli->log;
+	my @paths;
+	for my $path (@argv) {
+		$path =~ s{/+\z}{};
+		unless ( _valid_path($path) ) {
+			$log->error( 'invalid path: %s', $path );
+			return EXIT_ERROR;
+		}
+		push @paths, $path;
+	}
+
+	my $here = Cwd::abs_path(q{.});
+	if ( defined $here && $here eq $root ) {
+		$log->notice('already the main checkout, nothing to do');
+		return EXIT_SUCCESS;
+	}
+
+	for my $path (@paths) {
+		return EXIT_ERROR unless _clone_path( $app, $root, $path );
+	}
+
+	return EXIT_SUCCESS;
+}
+
+# _valid_path($path):
+#	True when one path of clone holds the shape of WT-CLONE-5: a
+#	relative path, with no .. segment, and not the current
+#	directory.
+sub _valid_path ($path)
+{
+	return $path =~ $PATH && $path !~ m{[.][.]} && $path ne q{.};
+}
+
+# _clone_path($app, $root, $path):
+#	Take one path of clone (WT-CLONE-2). A repository gives a
+#	local clone, a directory gives one clone of each child, and a
+#	plain file gives a copy. An absent path gives a message and no
+#	failure, because a consumer names a path that its own tree can
+#	omit (WT-CLONE-5). The method returns 0 after a failure.
+sub _clone_path ( $app, $root, $path )
+{
+	my $log = $app->cli->log;
+	my $src = File::Spec->catdir( $root, $path );
+
+	return _clone_repo( $app, $src, $path ) if -d $src && -e "$src/.git";
+
+	if ( -d $src ) {
+		opendir my $dh, $src or do {
+			$log->error( 'cannot read %s: %s', $src, $! );
+			return 0;
+		};
+		my @names =
+		    sort grep { !m{\A[.]} && -d "$src/$_" } readdir $dh;
+		closedir $dh;
+
+		for my $name (@names) {
+			return 0
+			    unless _clone_repo( $app, "$src/$name",
+				"$path/$name" );
+		}
+
+		return 1;
+	}
+
+	return _copy_file( $app, $src, $path ) if -f $src;
+
+	unless ( -e $src ) {
+		$log->notice( 'missing in main checkout, skipped: %s', $path );
+		return 1;
+	}
+
+	$log->error( 'not a repository, directory or file: %s', $src );
+
+	return 0;
+}
+
+# _clone_repo($app, $src, $dst):
+#	Make one local clone of a repository of the main checkout, and
+#	set its origin to the origin URL of the source (WT-CLONE-2). A
+#	destination that exists stays as it is (WT-CLONE-4).
+#
+#	A project that no clone reaches gives an incomplete worktree,
+#	and no message names it later. So a failure stops the run.
+sub _clone_repo ( $app, $src, $dst )
+{
+	my $log = $app->cli->log;
+	if ( -e $dst ) {
+		$log->notice( 'already exists, skipped: %s', $dst );
+		return 1;
+	}
+
+	unless ( -r $src && -x $src && -e "$src/.git" ) {
+		$log->error( 'unreadable or not a git repository: %s', $src );
+		return 0;
+	}
+
+	my $parent = dirname($dst);
+	unless ( -d $parent ) {
+		File::Path::make_path($parent);
+		unless ( -d $parent ) {
+			$log->error( 'cannot make the directory %s', $parent );
+			return 0;
+		}
+	}
+
+	unless (
+		defined $app->command(
+			[ 'git', 'clone', '--quiet', $src, $dst ] ) )
+	{
+		$log->error( 'cannot clone %s: %s', $src, $app->error );
+		return 0;
+	}
+
+	# A source with no origin gives undef here, and the clone keeps
+	# the source itself as its origin.
+	my $origin =
+	    _capture( $app, 'git', '-C', $src, 'remote', 'get-url', 'origin' );
+	if ( defined $origin && length $origin ) {
+		unless (
+			defined $app->command( [
+					'git',     '-C',
+					$dst,      'remote',
+					'set-url', 'origin',
+					$origin
+				] ) )
+		{
+			$log->error( 'cannot set the origin of %s: %s',
+				$dst, $app->error );
+			return 0;
+		}
+	}
+
+	return _copy_env_tree( $app, $src, $dst );
+}
+
+# _copy_env_tree($app, $src, $dst):
+#	Copy each regular .env file of one source tree, at any depth,
+#	into the clone (WT-CLONE-3). The files are gitignored, so the
+#	clone above holds none of them. The walk skips .git and a
+#	nested worktree directory, and it copies no symbolic link: a
+#	.env link is content of the repository, and it stays there.
+sub _copy_env_tree ( $app, $src, $dst )
+{
+	my $ok = 1;
+	File::Find::find( {
+			no_chdir => 1,
+			wanted   => sub {
+				my $name = $File::Find::name;
+				my $base = basename($name);
+				my $skip = $base eq '.git'
+				    || $name =~ m{/[.]claude/worktrees\z};
+				if ($skip) {
+					$File::Find::prune = 1;
+					return;
+				}
+				return unless $base eq '.env';
+				return if -l $name || !-f $name;
+
+				# A gitignored parent directory is absent
+				# in the clone, so the copy makes it.
+				my $rel    = substr $name, length($src) + 1;
+				my $parent = dirname("$dst/$rel");
+				File::Path::make_path($parent)
+				    unless -d $parent;
+				$ok = 0
+				    unless _copy_file( $app, $name,
+					"$dst/$rel" );
+
+				return;
+			},
+		},
+		$src
+	);
+
+	return $ok;
+}
+
+# _copy_file($app, $src, $dst):
+#	Copy one file with the mode of the source. The method returns
+#	0 after a failure.
+sub _copy_file ( $app, $src, $dst )
+{
+	my $log = $app->cli->log;
+
+	# A project can leave a symbolic link at the destination, and
+	# the copy must not write through it. A regular file that
+	# exists stays, so a second run keeps a local change
+	# (WT-CLONE-4).
+	unlink $dst if -l $dst;
+	if ( -e $dst ) {
+		$log->notice( 'already exists, skipped: %s', $dst );
+		return 1;
+	}
+
+	# A .env file holds credentials, so the copy takes the mode of
+	# the source and not the default of the umask. The stat runs
+	# before the copy: a stat after it can follow a parallel
+	# removal of the source, and the chmod then gives the copy the
+	# mode 0.
+	my @stat = stat $src;
+	unless ( File::Copy::copy( $src, $dst ) ) {
+		$log->error( 'cannot copy %s -> %s: %s', $src, $dst, $! );
+		return 0;
+	}
+	chmod $stat[2] & 07777, $dst if @stat;
+	$log->notice( 'copied %s -> %s', $src, $dst );
+
+	return 1;
 }
 
 # _delete_branch($app, $root, $branch):

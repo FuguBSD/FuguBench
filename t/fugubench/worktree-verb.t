@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 # ex:ts=8 sw=4:
-# The create, the remove, and the list subcommands of the worktree
-# verb (WT-CREATE, WT-REMOVE, WT-LIST, WT-SAFETY).
+# The create, the remove, the list, and the clone subcommands of the
+# worktree verb (WT-CREATE, WT-REMOVE, WT-LIST, WT-CLONE, WT-SAFETY).
 #
 # Each case runs bin/fugubench as a child with -Ilib, against a
 # temporary repository with one commit on main and an empty
@@ -125,6 +125,43 @@ sub _poll ( $code, $limit = 30 )
 	}
 
 	return;
+}
+
+# _source($path, $origin):
+#	A git repository at one path, with one commit on main and one
+#	origin URL. Clone reads the URL from the source, so the clone
+#	of a bootstrap points at the same remote.
+sub _source ( $path, $origin )
+{
+	_git( 'init', '--quiet', '-b', 'main', $path );
+	_git( '-C', $path, 'config', 'user.email',     'a@b' );
+	_git( '-C', $path, 'config', 'user.name',      'a' );
+	_git( '-C', $path, 'config', 'commit.gpgsign', 'false' );
+	_git( '-C', $path, 'remote', 'add', 'origin', $origin );
+	_write( "$path/f.txt", "x\n" );
+	_git( '-C', $path, 'add',    '-A' );
+	_git( '-C', $path, 'commit', '--quiet', '-m', 'Initial commit' );
+
+	return;
+}
+
+# _clone($dir, $cwd, @paths):
+#	Run the clone subcommand of one checkout from one current
+#	directory. A bootstrap target runs it that way: the current
+#	directory is the worktree, and -C names the main checkout.
+sub _clone ( $dir, $cwd, @paths )
+{
+	my $result = Fugu::Process->run(
+		cmd => [
+			$^X,  "-I$root/lib", $program, '-C',
+			$dir, 'worktree',    'clone',  @paths
+		],
+		cwd => $cwd,
+	);
+	die "cannot run $program: $result->{error}"
+	    if defined $result->{error};
+
+	return $result;
 }
 
 subtest 'create makes one worktree and reports its path' => sub {
@@ -514,6 +551,113 @@ subtest 'list reports each worktree with its age and its state' => sub {
 		qr/^clean\s+[?] d\s+/m,
 		'the age of a gitfile that no read reaches is a question mark'
 	);
+};
+
+subtest 'clone makes local clones and copies the env files' => sub {
+	my ( $dir, $real ) = _repo();
+	my $dest = tempdir( CLEANUP => 1 );
+
+	_source( "$real/Projects/one", 'https://example.com/one.git' );
+	_source( "$real/Projects/two", 'https://example.com/two.git' );
+
+	# A .env file is gitignored, so no clone of git carries it.
+	# The copy must keep the mode of the source, and it must skip
+	# a link: a .env link is content of the repository (WT-CLONE-3).
+	make_path("$real/Projects/one/deep");
+	Fugu::File->write( "$real/Projects/one/deep/.env",
+		"KEY=value\n", mode => 0600 )
+	    or die 'write the .env file';
+	symlink 'f.txt', "$real/Projects/two/.env" or die "symlink: $!";
+
+	my $result = _clone( $dir, $dest, 'Projects' );
+	is( $result->{exit_code}, 0, 'clone exits 0' )
+	    or diag $result->{stderr};
+	ok( -d "$dest/Projects/one/.git",
+		'clone takes the first child of the directory (WT-CLONE-2)' );
+	ok( -d "$dest/Projects/two/.git",
+		'clone takes the second child of the directory (WT-CLONE-2)' );
+	is(
+		_git( '-C', "$dest/Projects/one", 'remote', 'get-url',
+			'origin' ),
+		"https://example.com/one.git\n",
+		'the clone carries the origin URL of the source (WT-CLONE-2)'
+	);
+
+	ok( -f "$dest/Projects/one/deep/.env",
+		'the .env file at depth arrives (WT-CLONE-3)' );
+	is(
+		( stat "$dest/Projects/one/deep/.env" )[2] & 07777,
+		0600,
+		'the copy keeps the mode of the source (WT-CLONE-3)'
+	);
+	ok( !-e "$dest/Projects/two/.env",
+		'clone skips a .env symbolic link (WT-CLONE-3)' );
+};
+
+subtest 'clone keeps what exists and refuses a bad path' => sub {
+	my ( $dir, $real ) = _repo();
+	my $dest = tempdir( CLEANUP => 1 );
+
+	_source( "$real/Wiki", 'https://example.com/wiki.git' );
+	_write( "$real/.env", "KEY=value\n" );
+
+	# A destination that exists stays as it is, so a second run
+	# repairs a bootstrap that stopped early (WT-CLONE-4).
+	make_path("$dest/Wiki");
+	_write( "$dest/Wiki/local.txt", "mine\n" );
+
+	# A project can leave a symbolic link at the destination of a
+	# file copy. The copy replaces the link, and it writes no byte
+	# through it (WT-CLONE-4).
+	my $away = tempdir( CLEANUP => 1 );
+	_write( "$away/target.txt", "outside\n" );
+	symlink "$away/target.txt", "$dest/.env" or die "symlink: $!";
+
+	my $result = _clone( $dir, $dest, 'Wiki', '.env', 'absent' );
+	is( $result->{exit_code}, 0, 'clone exits 0' )
+	    or diag $result->{stderr};
+	ok( !-e "$dest/Wiki/.git",
+		'clone keeps the destination that exists (WT-CLONE-4)' );
+	is( Fugu::File->read("$dest/Wiki/local.txt"),
+		"mine\n", 'the local change stays (WT-CLONE-4)' );
+	like(
+		$result->{stderr},
+		qr{already exists, skipped: Wiki},
+		'the message names the destination that clone skips'
+	);
+
+	ok( !-l "$dest/.env", 'clone replaces the destination link' );
+	is( Fugu::File->read("$dest/.env"),
+		"KEY=value\n", 'the copy holds the source (WT-CLONE-4)' );
+	is( Fugu::File->read("$away/target.txt"),
+		"outside\n", 'the file outside the tree keeps its content' );
+
+	like(
+		$result->{stderr},
+		qr{missing in main checkout, skipped: absent},
+		'clone skips an absent path with a message (WT-CLONE-5)'
+	);
+
+	# A path with a parent segment leaves the current directory,
+	# so the shape check stops it before any work (WT-CLONE-5).
+	$result = _clone( $dir, $dest, '../escape' );
+	is( $result->{exit_code}, 1,
+		'clone refuses a path with a parent segment (WT-CLONE-5)' );
+	like( $result->{stderr}, qr/invalid path/,
+		'the message names the cause' );
+
+	# In the main checkout itself, clone changes nothing
+	# (WT-CLONE-6).
+	$result = _clone( $dir, $dir, 'Wiki' );
+	is( $result->{exit_code}, 0, 'clone exits 0 in the main checkout' )
+	    or diag $result->{stderr};
+	like(
+		$result->{stderr},
+		qr/already the main checkout, nothing to do/,
+		'the message names the cause (WT-CLONE-6)'
+	);
+	ok( -d "$real/Wiki/.git",
+		'the main checkout keeps its repository (WT-CLONE-6)' );
 };
 
 subtest 'the base of the worktrees resolves against the root' => sub {

@@ -174,9 +174,10 @@ starts a comment.
 The program replaces four scripts that have tests, and the tests come with it.
 
 - **CLI-CONFORMANCE-1** — The test suite must hold the black-box tests of the
-  Workspace scripts `worktree.pl`, `wiki.pl`, and `traces.pl`, with the
-  invocation changed and nothing else. A behavior that a test asserts must hold
-  in the program.
+  Workspace scripts `worktree.pl`, `wiki.pl`, and `traces.pl`. Each ported test
+  must change the invocation and the fixture, and nothing else. An assertion on
+  a file of the Workspace stays in the Workspace test. A behavior that a test
+  asserts must hold in the program.
 - **CLI-CONFORMANCE-2** — The dry-run trace of `deps` over the manifests of
   every consumer must equal the trace of the synced `scripts/deps`, line for
   line. The rule holds until Tooling retires the script. The fixtures are copies

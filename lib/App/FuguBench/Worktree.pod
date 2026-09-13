@@ -7,13 +7,16 @@ App::FuguBench::Worktree - the worktree verb of fugubench
     fugubench [-C <root>] worktree create <name>
     fugubench [-C <root>] worktree remove [--force] <name>
     fugubench [-C <root>] worktree list
+    fugubench [-C <root>] worktree clone <path>...
 
 =head1 DESCRIPTION
 
 B<App::FuguBench::Worktree> makes, removes, and lists the worktrees
-of one checkout. It holds the subcommands C<create>, C<remove>, and
-C<list>, and it reads the subcommand as its first argument. Every
-other word is an unknown subcommand, and it gives the usage error.
+of one checkout, and it clones the gitignored trees of that checkout
+into a worktree. The subcommands are C<create>, C<remove>, C<list>,
+and C<clone>, and the verb reads the subcommand as its first
+argument. Every other word is an unknown subcommand, and it gives
+the usage error.
 
 =head2 THE ROOT
 
@@ -120,6 +123,43 @@ The age comes from the F<.git> file of the worktree. That file
 records the creation, and later work leaves it alone. A file that no
 read reaches gives the age C<?>.
 
+=head2 clone
+
+C<clone E<lt>pathE<gt>...> copies the gitignored paths of the main
+checkout into the current directory, with no network and no C<gh>. A
+bootstrap target of a worktree names the paths, so C<create> reaches
+this subcommand through C<make>.
+
+A path is relative, and it holds no C<..> segment and no C<.> alone.
+The first character is a letter, a digit, a dot, or an underscore: a
+gitignored path such as F<.env> starts with a dot, and a path that
+starts with a dash reaches git as an option. Every path passes the
+shape check before any work starts, so one bad path stops the run and
+changes nothing.
+
+A path that names a git repository gives a local clone, and the
+subcommand sets the C<origin> of the clone to the origin URL of the
+source. A path that names a directory of repositories gives one clone
+of each child. A path that names a plain file gives a copy of the
+file. A path that is absent in the main checkout gives a message, and
+no failure.
+
+The subcommand copies each regular F<.env> file of a cloned tree, at
+any depth, with the mode of the source. Those files are gitignored,
+so the clone of git holds none of them. The walk skips F<.git> and a
+nested worktree directory, and it copies no symbolic link: a F<.env>
+link is content of the repository, and it stays there.
+
+A destination that exists stays as it is, so a second run repairs a
+bootstrap that stopped early and keeps a local change. A symbolic
+link at the destination of a file copy goes first, and a regular file
+takes its place, so the copy writes no byte through the link.
+
+The subcommand writes inside the current directory only. In the main
+checkout itself it reports that fact and changes nothing. It writes
+no credential into a settings file: a F<.env> file is a file copy,
+and the HOME profiles hold the credentials.
+
 =head1 EXIT CODES
 
 The verb returns the exit codes of L<Fugu::CLI>. A subcommand that
@@ -129,11 +169,14 @@ It returns 1 after a failure: a root that is no main checkout, a name
 of the wrong shape, a nest, a path that is no worktree of the name, a
 step that fails, or a signal. C<remove> returns 1 after a refusal,
 after a path that resolves outside the base, and after a directory or
-a branch that stays.
+a branch that stays. C<clone> returns 1 after a path of the wrong
+shape, after a source that no read reaches, and after a clone or a
+copy that fails.
 
 A missing argument, an extra argument, and an unknown subcommand give
 the usage error and return 2. A C<worktree.base> value of the wrong
-shape returns 3.
+shape returns 3. C<clone> reads no base, so it returns no 3 of its
+own.
 
 =head1 SEE ALSO
 

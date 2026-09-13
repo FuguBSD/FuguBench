@@ -93,7 +93,10 @@ comes from Workspace WS-WORKTREE and Workspace WS-BOOTSTRAP.
   repairs a partial bootstrap and keeps local changes. The verb replaces a
   symbolic link at the destination of a file copy with a regular file.
 - **WT-CLONE-5** — A path must be relative, with no `..` segment, and not `.`.
-  The verb skips a path that is absent in the main checkout, with a message.
+  The first character must be a letter, a digit, a dot, or an underscore. A
+  gitignored path starts with a dot, and a path that starts with a dash reaches
+  git as an option. The verb skips a path that is absent in the main checkout,
+  with a message.
 - **WT-CLONE-6** — The verb must write inside the current directory only. In the
   main checkout itself, it must report that fact and change nothing.
 - **WT-CLONE-7** — The verb must write no credential into a settings file. A
