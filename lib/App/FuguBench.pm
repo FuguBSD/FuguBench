@@ -318,7 +318,11 @@ sub _group ( $self, $cmd, %args )
 
 	$self->{child} = $result->{pid};
 	my $reaped = waitpid $result->{pid}, 0;
-	my $code   = Fugu::Process->exit_code($?);
+
+	# The errno of the wait, next to the wait itself: each read
+	# below sets its own.
+	my $errno = $!;
+	my $code  = Fugu::Process->exit_code($?);
 	$self->{child} = undef;
 
 	for my $file (@files) {
@@ -330,7 +334,7 @@ sub _group ( $self, $cmd, %args )
 	# one in $?, so the code above belongs to no run of this
 	# command.
 	if ( $reaped != $result->{pid} ) {
-		$self->{error} = "$cmd->[0] left no status: $!";
+		$self->{error} = "$cmd->[0] left no status: $errno";
 		return;
 	}
 
