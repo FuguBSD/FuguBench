@@ -786,32 +786,66 @@ subtest 'the nested worktree directory follows the configured base' => sub {
 		'the .env walk skips the configured base (WT-CLONE-3)' );
 };
 
-subtest 'a base of the root gives no nested directory' => sub {
+subtest 'a base of the root stops each subcommand' => sub {
 
-	# A worktree.base of . resolves to the root, so the base holds
-	# no directory of its own. The skip of WT-REMOVE-3 then names
-	# nothing, and the verb must read no part outside the base.
-	my ( $dir, $real ) = _repo();
-	_write( "$dir/.toolingrc", "worktree.base .\n" );
+	# A worktree.base of . resolves to the root. The base then
+	# holds every path of the checkout, and the containment guard
+	# of remove admits each one. So the verb stops with the
+	# configuration error (CLI-CONFIG-3).
+	my ($dir) = _repo();
+	make_path("$dir/lib");
+	_write( "$dir/lib/Real.pm", "1;\n" );
+	_write( "$dir/.toolingrc",  "worktree.base .\n" );
+	_git( '-C', $dir, 'add', '-A' );
+	_git( '-C', $dir, 'commit', '--quiet', '-m', 'Add a tracked tree' );
 
-	my $result = _run( $dir, 'create', 'one' );
-	is( $result->{exit_code}, 0, 'create exits 0 with a base of the root' )
-	    or diag $result->{stderr};
-	is( $result->{stdout}, "$real/one\n", 'the worktree sits in the root' );
+	for my $case ( [ 'create', 'one' ], [ 'remove', 'one' ], ['list'] ) {
+		my $result = _run( $dir, @{$case} );
+		is( $result->{exit_code}, 3,
+			"$case->[0] stops with the configuration error" );
+		like( $result->{stderr}, qr/worktree[.]base/,
+			'the message names the key' );
+	}
 
-	$result = _run( $dir, 'list' );
-	is( $result->{exit_code}, 0, 'list exits 0' ) or diag $result->{stderr};
-	like( $result->{stdout}, qr/^one\s+\d+ d\s+clean$/m,
-		'list reads a base of the root' );
-	unlike( $result->{stderr}, qr/Worktree[.]pm line \d+/,
-		'list writes no warning of the module' );
+	my $dest   = tempdir( CLEANUP => 1 );
+	my $result = _clone( $dir, $dest, 'lib' );
+	is( $result->{exit_code}, 3,
+		'clone stops with the configuration error' );
+	ok( !-e "$dest/lib", 'clone copies nothing' );
 
-	$result = _run( $dir, 'remove', 'one' );
-	is( $result->{exit_code}, 0, 'remove takes the worktree' )
-	    or diag $result->{stderr};
-	unlike( $result->{stderr}, qr/Worktree[.]pm line \d+/,
-		'remove writes no warning of the module' );
-	ok( !-e "$real/one", 'the worktree is gone' );
+	# The remove of a tracked directory of the checkout. No other
+	# guard holds here: the risk walk finds no repository in a
+	# plain directory, and _take then deletes the tree
+	# (WT-SAFETY-1).
+	$result = _run( $dir, 'remove', 'lib' );
+	is( $result->{exit_code}, 3, 'remove refuses a tracked directory' );
+	ok( -f "$dir/lib/Real.pm", 'the tracked tree stays' );
+	is( _git( '-C', $dir, 'status', '--porcelain' ),
+		q{}, 'the checkout holds no change' );
+};
+
+subtest 'a base of the wrong shape stops each subcommand' => sub {
+
+	# The value leaves the tree, so the shape check of
+	# CLI-CONFIG-3 refuses it. Every subcommand reads the base,
+	# so each one stops with the configuration error.
+	my ($dir) = _repo();
+	_write( "$dir/.toolingrc", "worktree.base ../escape\n" );
+
+	for my $case ( [ 'create', 'one' ], [ 'remove', 'one' ], ['list'] ) {
+		my $result = _run( $dir, @{$case} );
+		is( $result->{exit_code}, 3,
+			"$case->[0] stops with the configuration error" );
+		like( $result->{stderr}, qr/worktree[.]base: .*leaves the tree/,
+			'the message names the key and the cause' );
+	}
+
+	my $dest   = tempdir( CLEANUP => 1 );
+	my $result = _clone( $dir, $dest, 'Projects' );
+	is( $result->{exit_code}, 3,
+		'clone stops with the configuration error' );
+	like( $result->{stderr}, qr/worktree[.]base: .*leaves the tree/,
+		'the message names the key and the cause' );
 };
 
 subtest 'a linked worktree is no main checkout' => sub {

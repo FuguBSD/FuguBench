@@ -35,6 +35,10 @@ and not against the home of the key. A clone under F<Projects/> can
 inherit the key from the workspace above it, and the worktrees of
 that clone still belong to the clone.
 
+The value must name a directory below the root. A value of C<.>
+resolves to the root itself, and the base then holds every path of
+the checkout. Each subcommand refuses such a value.
+
 =head2 create
 
 C<create E<lt>nameE<gt>> makes the worktree at
@@ -181,7 +185,8 @@ copy that fails.
 
 A missing argument, an extra argument, and an unknown subcommand give
 the usage error and return 2. Every subcommand reads the base, so a
-C<worktree.base> value of the wrong shape returns 3 from each one.
+C<worktree.base> value of the wrong shape returns 3 from each one. A
+value that resolves to the root returns 3 too.
 
 =head1 SEE ALSO
 

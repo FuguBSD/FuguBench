@@ -150,6 +150,12 @@ sub _root ($app)
 #	The base is the worktree.base key, and it resolves against the
 #	root (CLI-CONFIG-2). A clone under Projects/ can inherit the
 #	key from the workspace, and its worktrees belong to the clone.
+#
+#	The base must name a directory below the root. A value of .
+#	resolves to the root itself, and the base then holds every
+#	path of the checkout. The containment guard of remove admits
+#	each one, so a plain directory of the checkout reaches
+#	remove_tree. The method refuses that value (CLI-CONFIG-3).
 sub _setup ($app)
 {
 	my ( $code, $root ) = _root($app);
@@ -163,7 +169,14 @@ sub _setup ($app)
 		return Fugu::CLI::EXIT_CONFIG_ERROR();
 	}
 
-	return ( EXIT_SUCCESS, $root, File::Spec->catdir( $root, $dir ) );
+	my $base = File::Spec->catdir( $root, $dir );
+	if ( $base eq $root ) {
+		$app->cli->log->error(
+			'worktree.base: the directory is the root: %s', $dir );
+		return Fugu::CLI::EXIT_CONFIG_ERROR();
+	}
+
+	return ( EXIT_SUCCESS, $root, $base );
 }
 
 # _nested($root, $base):
@@ -172,13 +185,11 @@ sub _setup ($app)
 #	relative path under a checkout root. So the pattern matches it
 #	as a whole segment at the end of a path.
 #
-#	A value of . resolves to the root itself, and the base then
-#	names no directory below it. The pattern matches no path at
-#	all, and the walk skips nothing.
+#	_setup refuses a base that equals the root, and every caller
+#	reads the base from _setup. So the base is longer than the
+#	root, and the substr stays inside the string.
 sub _nested ( $root, $base )
 {
-	return qr{(?!)} if $base eq $root;
-
 	my $dir = substr $base, length($root) + 1;
 
 	return qr{(?:\A|/)\Q$dir\E\z};

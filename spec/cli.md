@@ -113,7 +113,10 @@ starts a comment.
   must anchor a `wiki.` value at the home of `wiki.origin`, and `worktree.base`
   at the root.
 - **CLI-CONFIG-3** — A value must pass the shape check of its use. A directory
-  is a relative path with no `..` segment, and a URL holds a scheme.
+  is a relative path with no `..` segment, and a URL holds a scheme. The
+  `worktree.base` value must name a directory below the root, so a value of `.`
+  is an error. A base that is the root itself holds every path of the checkout,
+  and the containment guard of `worktree remove` then admits each one.
 
 <a id="cli-fugu"></a>
 
