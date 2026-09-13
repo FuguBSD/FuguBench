@@ -191,7 +191,11 @@ subtest 'a start under no .toolingrc reports one time' => sub {
 
 	# The sandbox row reads the checkout in front of the verb, so
 	# the walk of a failure must not run a second time.
-	my $r = _run( $root, '-C', $dir, 'traces' );
+	#
+	# The run names an absent trace root. The verb then reads no
+	# operator home, and the configuration error of the walk comes
+	# in front of that failure on every host (CLI-CHECKOUT-3).
+	my $r = _run( $root, '-C', $dir, 'traces', '--root', "$dir/nosuch" );
 	is( $r->{exit_code}, 3, 'the verb exits 3' );
 	my @lines = grep { /no [.]toolingrc above/ } split /\n/, $r->{stderr};
 	is( scalar @lines, 1, 'the walk reports the absent file one time' )

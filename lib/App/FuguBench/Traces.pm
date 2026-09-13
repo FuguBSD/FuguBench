@@ -185,15 +185,21 @@ sub _run ( $app, @argv )
 {
 	return $app->cli->command_usage_error('traces') if @argv;
 
-	my $log  = $app->cli->log;
+	my $log = $app->cli->log;
+
+	# The checkout comes first. A start under no .toolingrc is a
+	# configuration error (CLI-CHECKOUT-3), and the trace root
+	# under the home of the operator is absent on a host that runs
+	# no Claude Code. The other order hides the configuration
+	# error behind a failure there.
+	my ( $code, $checkout ) = _checkout_path($app);
+	return $code if $code != EXIT_SUCCESS;
+
 	my $root = _trace_root($app);
 	unless ( -d $root ) {
 		$log->error( 'no such trace root: %s', $root );
 		return EXIT_ERROR;
 	}
-
-	my ( $code, $checkout ) = _checkout_path($app);
-	return $code if $code != EXIT_SUCCESS;
 
 	my $name = $app->cli->option('name')
 	    // ( $checkout =~ s/[^A-Za-z0-9-]/-/gr );
