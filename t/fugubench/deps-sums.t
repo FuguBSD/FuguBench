@@ -350,6 +350,25 @@ sub _sums ($dir)
 	is( _sums($dir), undef, 'the run writes no digest file' );
 }
 
+# The signed-manifest test is a probe, so an empty key set is a
+# warning there, and never an error (DEPS-SUMS-6, DEPS-KEYS-5)
+{
+	my $url = "$SIGNED/tool-1.0.0";
+	my $dir = _checkout( 'Darwin.txt' => "test dist $url\n" );
+	my $r   = _refresh($dir);
+	is( $r->{exit_code}, 0, 'a probe with no declared key exits 0' );
+	like(
+		$r->{stdout}, qr/^skipped the signed entry: \Q$url\E$/m,
+		'the manifest that answers keeps the entry off the tier'
+	);
+	like(
+		$r->{stderr}, qr/^\S+ \S+ WARNING: no key is declared/m,
+		'the empty key set of a probe reports at warning level'
+	);
+	unlike( $r->{stderr}, qr/ ERROR: /,
+		'a normal outcome reports no error' );
+}
+
 # A server that answers the manifest and withholds the signature
 # keeps the entry off the digest tier (DEPS-SUMS-3)
 {

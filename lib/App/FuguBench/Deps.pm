@@ -1009,7 +1009,7 @@ sub _verified ( $ctx, $url, $file, $dir )
 	return _check_digest( $ctx, $file, $signed_want, $name, 'signed' );
 }
 
-# _verify($ctx, $sums, $sig):
+# _verify($ctx, $sums, $sig, $level):
 #	Verify the signature over one SHA256 manifest with the
 #	declared keys, in trust order. The method returns the path of
 #	the key file that verified it, and undef after a failure,
@@ -1018,14 +1018,26 @@ sub _verified ( $ctx, $url, $file, $dir )
 #	Fugu::Signify reads each key file under the perl engine, so no
 #	host needs signify(1) (DEPS-TIER-8). An empty key set stops
 #	the signify tier (DEPS-KEYS-5).
-sub _verify ( $ctx, $sums, $sig )
+#
+#	$level names the level of a failure. The install path takes
+#	the default, because a failure there stops the run. The
+#	signed-manifest probe of a refresh passes 'warning', because a
+#	manifest that no key verifies keeps the entry off the digest
+#	tier, and the run goes on (DEPS-SUMS-6).
+sub _verify ( $ctx, $sums, $sig, $level = 'error' )
 {
 	my $log  = $ctx->{app}->cli->log;
 	my $keys = $ctx->{keys};
+	my $report =
+	    $level eq 'warning'
+	    ? sub (@line) { return $log->warning(@line) }
+	    : sub (@line) { return $log->error(@line) };
 
 	unless (@$keys) {
-		$log->error( 'no key is declared, so no signature verifies %s',
-			$sums );
+		$report->(
+			'no key is declared, so no signature verifies %s',
+			$sums
+		);
 		return;
 	}
 
@@ -1051,12 +1063,12 @@ sub _verify ( $ctx, $sums, $sig )
 	}
 
 	unless (@paths) {
-		$log->error(
+		$report->(
 			'no declared key loaded, so no signature verifies'
 			    . ' %s',
 			$sums
 		);
-		$log->error( '  %s', $_ ) for @failed;
+		$report->( '  %s', $_ ) for @failed;
 		return;
 	}
 
@@ -1066,9 +1078,10 @@ sub _verify ( $ctx, $sums, $sig )
 		signature => $sig
 	);
 	unless ( defined $public ) {
-		$log->error( 'no declared key verifies the signature of %s',
-			$sums );
-		$log->error( '  %s', $_ )
+		$report->(
+			'no declared key verifies the signature of %s', $sums
+		);
+		$report->( '  %s', $_ )
 		    for _reasons( _signify()->error ), @failed;
 		return;
 	}
@@ -1632,7 +1645,10 @@ sub _signed ( $ctx, @candidate )
 		return unless defined $got;
 		next   unless $got;
 
-		next unless _verify( $ctx, $sums, $sig );
+		# A manifest that no key verifies is a normal outcome
+		# of the probe, so each line of it is a warning
+		# (DEPS-SUMS-6).
+		next unless _verify( $ctx, $sums, $sig, 'warning' );
 		$answer->{verified} = 1;
 
 		my $digests = _parse_digests( $ctx->{app}, $sums );
