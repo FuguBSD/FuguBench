@@ -54,10 +54,11 @@ code of a call to a warning and returns 0.
 C<SessionStart> runs C<wiki init>, and then C<wiki open>. The
 identifier of the session is C<session_id>, and the verb replaces each
 character outside a letter, a digit, a dot, a dash, and an underscore
-with a dash. The page name of C<wiki open> reaches standard output,
-and the harness adds that line to the context of the session.
-C<wiki init> writes the directory of a clone that it makes, and that
-line comes in front of the page name.
+with a dash. The page name of C<wiki open> reaches standard output as
+the only line, and the harness adds that line to the context of the
+session. C<wiki init> writes the directory of a clone that it makes,
+and the event runs that call with its standard output on standard
+error.
 
 The project of the session is the child of the projects directory
 that holds the C<cwd>, and otherwise the C<wiki.project> value. The
@@ -111,11 +112,16 @@ C<WorktreeCreate>, 60 for C<WorktreeRemove>, 60 for C<SessionStart>,
 and 30 for C<SessionEnd>. Without one, the C<SessionEnd> hooks share a
 budget of 1.5 seconds, and a commit with a push does not fit it.
 
-The writer keeps every key that it does not own, at the top level and
-under C<hooks>. It replaces the list of each of the four events, and
-it leaves every other event as it is. The keys reach the file in
-sorted order, with an indent of two spaces and a final newline, so a
-second run writes the same bytes and causes no change.
+The writer keeps every key that it does not own, at the top level,
+under C<hooks>, and under C<worktree>. It replaces the list of each of
+the four events, and it leaves every other event as it is. The keys
+reach the file in sorted order, with an indent of two spaces and a
+final newline, so a second run writes the same bytes and causes no
+change.
+
+The path of the file, the two keys, and the values live in this
+module, because Claude Code names them. The doctor takes all of them
+from here, so the report and the write never disagree.
 
 A file that does not parse is a failure, and the subcommand then
 writes nothing. A C<hooks> value or a C<worktree> value that is no
@@ -136,9 +142,27 @@ C<statusMessage>: the harness names the event itself. The doctor reads
 the same hash, so the report of an entry and the write of an entry
 never disagree.
 
+=head2 worktree
+
+C<worktree> returns a reference to a hash of the worktree settings
+that C<install> writes. C<baseRef> holds C<head>, because a worktree
+starts at the local HEAD.
+
+=head2 settings_path
+
+C<settings_path($root)> returns the settings file of one checkout
+root, F<.claude/settings.json> below it.
+
+=head2 hooks_key and worktree_key
+
+C<hooks_key> returns C<hooks>, the key that holds the entries of the
+events. C<worktree_key> returns C<worktree>, the key that holds the
+worktree settings.
+
 =head1 RETURN VALUES
 
-C<command> and C<entries> return a hash reference.
+C<command>, C<entries>, and C<worktree> return a hash reference.
+C<settings_path>, C<hooks_key>, and C<worktree_key> return a string.
 
 The verb returns the exit codes of L<Fugu::CLI>. A session event and
 C<WorktreeRemove> return 0 after every payload. C<WorktreeCreate>

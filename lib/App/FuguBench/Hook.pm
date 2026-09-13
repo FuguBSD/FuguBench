@@ -43,7 +43,9 @@ use App::FuguBench::Worktree;
 #
 # This verb and the trace verb hold the Claude Code assumptions of
 # the program, and every other verb is agent-agnostic (D-10). The
-# payload shape lives here, and in no shared module.
+# payload shape lives here, and in no shared module. The settings
+# path, the keys of that file, the entries, and the worktree settings
+# live here too, and the doctor reads each one from this module.
 #
 # The payload comes first, and the checkout after. The verb builds
 # the checkout from the payload cwd, and it sets that checkout on the
@@ -86,6 +88,17 @@ my $PROJECT = qr{\A[A-Za-z0-9][A-Za-z0-9._-]*\z};
 # a space. The command names the shim and the event, and nothing
 # else, so no entry needs jq (D-07).
 my $SHIM = '"$CLAUDE_PROJECT_DIR/scripts/fugubench" hook ';
+
+# The settings file of one checkout, under its root
+# (HOOK-INSTALL-1), and the two keys of it that the install owns:
+# hooks for the entries, and worktree for the base reference
+# (HOOK-INSTALL-4). Claude Code names the path and the keys, so they
+# live in this verb (D-10), and settings_path, hooks_key, and
+# worktree_key give them to the doctor.
+use constant SETTINGS_DIR  => '.claude';
+use constant SETTINGS_FILE => 'settings.json';
+use constant HOOKS_KEY     => 'hooks';
+use constant WORKTREE_KEY  => 'worktree';
 
 # The JSON of the verb: the decoder of one payload, and the decoder
 # and the encoder of the settings file. It takes the bytes and it
@@ -205,6 +218,23 @@ sub _verb ( $app, $module, $verb, @args )
 	return $module->command($verb)->{run}->( $app, @args );
 }
 
+# _quiet($app, $module, $verb, @args):
+#	Run one verb with its standard output on standard error, and
+#	return its exit code. A hook reads standard output, so the
+#	result line of an event must reach it alone (CLI-PROGRAM-4).
+#	The result of a call inside an event is no result of the
+#	event.
+#
+#	The alias holds for the call, and local puts the glob back
+#	after it. The verb writes its line to the selected handle, and
+#	that handle is the STDOUT glob.
+sub _quiet ( $app, $module, $verb, @args )
+{
+	local *STDOUT = *STDERR;
+
+	return _verb( $app, $module, $verb, @args );
+}
+
 # _never_stop($app, $what, $code):
 #	Map a non-zero code of one call to a warning, and return zero
 #	(HOOK-EVENTS-3). A session event must never stop a session.
@@ -244,10 +274,11 @@ sub _session ( $app, $payload )
 #	Clone the library, and start the session page: wiki init
 #	first, and then wiki open (HOOK-SESSION-1).
 #
-#	The page name of wiki open reaches standard output, and the
-#	harness adds that line to the context of the session. init
-#	writes the directory of a clone that it makes (WIKI-CLONE-1),
-#	and that line comes in front of the page name.
+#	The page name of wiki open is the result of the event, and it
+#	reaches standard output alone (CLI-PROGRAM-4). The harness
+#	adds that line to the context of the session. init writes the
+#	directory of a clone that it makes (WIKI-CLONE-1), so that
+#	call runs with its standard output on standard error.
 sub _session_start ( $app, $payload )
 {
 	my ( $cwd, $session ) = _session( $app, $payload );
@@ -257,7 +288,7 @@ sub _session_start ( $app, $payload )
 	return EXIT_SUCCESS unless $checkout;
 
 	_never_stop( $app, 'wiki init',
-		_verb( $app, 'App::FuguBench::Wiki', 'wiki', 'init' ) );
+		_quiet( $app, 'App::FuguBench::Wiki', 'wiki', 'init' ) );
 
 	return _never_stop(
 		$app,
@@ -465,6 +496,45 @@ sub entries ($)
 	return \%entries;
 }
 
+# App::FuguBench::Hook->worktree:
+#	The worktree settings of the install, as a reference to a hash
+#	(HOOK-INSTALL-4). baseRef takes the value head, because a
+#	worktree starts at the local HEAD. Without that value, the
+#	built-in creation branches from origin/main and skips the
+#	bootstrap.
+#
+#	The doctor reads the same hash, so the report of a value and
+#	the write of a value never disagree.
+sub worktree ($)
+{
+	return { baseRef => 'head' };
+}
+
+# App::FuguBench::Hook->settings_path($root):
+#	The settings file of one checkout root (HOOK-INSTALL-1).
+#	Claude Code reads that path, so this verb holds it (D-10), and
+#	the doctor reads the file here.
+sub settings_path ( $, $root )
+{
+	return File::Spec->catfile( $root, SETTINGS_DIR, SETTINGS_FILE );
+}
+
+# App::FuguBench::Hook->hooks_key:
+#	The key of the settings file that holds the entries of the
+#	events (HOOK-INSTALL-1).
+sub hooks_key ($)
+{
+	return HOOKS_KEY;
+}
+
+# App::FuguBench::Hook->worktree_key:
+#	The key of the settings file that holds the worktree settings
+#	(HOOK-INSTALL-4).
+sub worktree_key ($)
+{
+	return WORKTREE_KEY;
+}
+
 # _install($app):
 #	Write the four entries and the base reference into
 #	.claude/settings.json of the checkout, and return the exit
@@ -479,9 +549,9 @@ sub entries ($)
 #	%EVENT, and it leaves every other event as it is, so the
 #	settings of the operator survive the write.
 #
-#	baseRef takes the value head, because a worktree starts at the
-#	local HEAD (HOOK-INSTALL-4). Without that value, the built-in
-#	creation branches from origin/main and skips the bootstrap.
+#	The worktree method holds the value of baseRef, and the write
+#	takes it from there (HOOK-INSTALL-4). It keeps every other key
+#	of that object, as it keeps every other event.
 #
 #	The keys reach the file in sorted order, so a second run writes
 #	the same bytes and causes no change (HOOK-INSTALL-1).
@@ -490,21 +560,23 @@ sub _install ($app)
 	my $checkout = $app->checkout;
 	return Fugu::CLI::EXIT_CONFIG_ERROR() unless $checkout;
 
-	my $dir  = File::Spec->catdir( $checkout->root, '.claude' );
-	my $path = File::Spec->catfile( $dir, 'settings.json' );
+	my $dir  = File::Spec->catdir( $checkout->root, SETTINGS_DIR );
+	my $path = __PACKAGE__->settings_path( $checkout->root );
 
 	my $settings = _settings( $app, $path );
 	return EXIT_ERROR unless $settings;
 
-	my $hooks = _object( $app, $settings, 'hooks', $path );
+	my $hooks = _object( $app, $settings, HOOKS_KEY, $path );
 	return EXIT_ERROR unless $hooks;
 
 	my $entries = __PACKAGE__->entries;
 	$hooks->{$_} = $entries->{$_} for keys %$entries;
 
-	my $worktree = _object( $app, $settings, 'worktree', $path );
+	my $worktree = _object( $app, $settings, WORKTREE_KEY, $path );
 	return EXIT_ERROR unless $worktree;
-	$worktree->{baseRef} = 'head';
+
+	my $want = __PACKAGE__->worktree;
+	$worktree->{$_} = $want->{$_} for keys %$want;
 
 	return EXIT_ERROR unless Fugu::File->ensure_dir($dir);
 

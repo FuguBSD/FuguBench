@@ -280,9 +280,13 @@ subtest 'SessionStart runs init in front of open' => sub {
 	is( $r->{exit_code}, 0, 'the event exits zero' ) or diag $r->{stderr};
 	ok( -e "$co/Wiki/.git", 'init cloned the library' );
 
-	my @lines = split /\n/, $r->{stdout};
-	is( $lines[-1], "Session-fresh-$today-1.md",
-		'the page name reaches standard output' );
+	# A hook reads standard output, so the page name is the whole
+	# of it (CLI-PROGRAM-4). init writes the directory of the
+	# clone that it made, and that line takes the other channel.
+	is( $r->{stdout}, "Session-fresh-$today-1.md\n",
+		'the page name is the whole of the standard output' );
+	like( $r->{stderr}, qr{^\Q$co\E/Wiki$}m,
+		'the directory of the clone reaches standard error' );
 
 	# A checkout that names no library stops init with the
 	# configuration code. The session must start all the same, so
@@ -419,6 +423,36 @@ subtest 'the payload names the checkout, and -C names it first' => sub {
 	is( $r->{stdout}, "Session-Workspace-$today-2.md\n",
 		'-C gives the checkout of the run' )
 	    or diag $r->{stderr};
+};
+
+subtest 'a session in a worktree reads the worktree' => sub {
+	my ( $tree, $origin ) = _tree();
+	my $co = _checkout( $tree, 'Workspace',
+		"wiki.origin\tfile://$origin\n" . "wiki.project\tWorkspace\n" );
+
+	# A worktree holds its own .toolingrc and its own library
+	# clone, so it is a checkout of its own. The walk must not cut
+	# the cwd at the marker (CLI-CHECKOUT-4, HOOK-EVENTS-5).
+	my $wt = "$co/.claude/worktrees/wt-1";
+	_write( "$wt/.toolingrc",
+		"wiki.origin\tfile://$origin\n" . "wiki.project\tTree\n" );
+	_git( $tree, 'clone', '--quiet', "$tree/origin.git", "$wt/Wiki" );
+
+	my $page = "Session-Tree-$today-1.md";
+	my $r    = _hook( $tree, 'SessionStart',
+		_json( session_id => 's1', cwd => $wt ) );
+	is( $r->{stdout}, "$page\n", 'the page takes the project of the worktree' )
+	    or diag $r->{stderr};
+	ok( -e "$wt/Wiki/$page", 'the page lands in the library of the worktree' );
+	is( scalar( glob "$co/Wiki/Session-*" ),
+		undef, 'the library above the worktree holds no page' );
+
+	# SessionEnd reads the same checkout, and it closes that page.
+	$r = _hook( $tree, 'SessionEnd',
+		_json( session_id => 's1', cwd => $wt ) );
+	is( $r->{exit_code}, 0, 'SessionEnd exits zero' ) or diag $r->{stderr};
+	like( Fugu::File->read("$wt/Wiki/$page"),
+		qr/^Closed: /m, 'the page of the worktree holds the closed line' );
 };
 
 subtest 'WorktreeCreate writes the path, and a second run repeats it' => sub {
