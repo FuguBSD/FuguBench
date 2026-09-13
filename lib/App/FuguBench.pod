@@ -160,6 +160,11 @@ git, so the row unveils nothing. The C<install> subcommand writes one
 file of its own, and the write promises of the row cover that write.
 The row names no unveil list, so no walk runs in front of the verb.
 
+C<doctor> runs git for the library check and for the fix, so its row
+unveils nothing too. It reads the settings file itself, and C<rpath>
+covers that read. It writes no file of its own: git writes every byte
+of the fix.
+
 =head1 RETURN VALUES
 
 C<new> returns a dispatcher. C<run> returns an exit code. C<cli>

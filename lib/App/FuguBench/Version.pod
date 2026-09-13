@@ -22,6 +22,13 @@ F<.toolingrc>.
 C<command($verb)> returns the entry of the L<Fugu::CLI> table. The
 module holds one verb, so it ignores the name.
 
+=head2 line
+
+C<line> returns the line of the verb: the version of the program and
+the version of the Fugu library beside it. The doctor reports this
+line as its version check, so the two verbs never name a different
+version.
+
 =head1 THE VERSIONS
 
 The dist build stamps C<our $VERSION> into every staged package. A
@@ -33,11 +40,12 @@ one in a checkout, and the snapshot in the pack.
 
 =head1 RETURN VALUES
 
-C<command> returns a hash reference, and its body returns 0.
+C<command> returns a hash reference, and its body returns 0. C<line>
+returns a string.
 
 =head1 SEE ALSO
 
-L<App::FuguBench>, L<Fugu::CLI>
+L<App::FuguBench>, L<App::FuguBench::Doctor>, L<Fugu::CLI>
 
 =head1 AUTHORS
 

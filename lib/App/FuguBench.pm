@@ -32,6 +32,7 @@ use Fugu::Process;
 use Fugu::Sandbox;
 
 use App::FuguBench::Checkout;
+use App::FuguBench::Doctor;
 use App::FuguBench::Hook;
 use App::FuguBench::Traces;
 use App::FuguBench::Version;
@@ -56,6 +57,7 @@ use App::FuguBench::Worktree;
 # it. The module returns the entry of the Fugu::CLI table from its
 # command class method.
 my @VERBS = (
+	[ 'doctor',   'App::FuguBench::Doctor' ],
 	[ 'hook',     'App::FuguBench::Hook' ],
 	[ 'traces',   'App::FuguBench::Traces' ],
 	[ 'version',  'App::FuguBench::Version' ],
@@ -88,8 +90,14 @@ my @VERBS = (
 # git, so the row unveils nothing. The `install` subcommand writes one
 # file of its own, and the write promises of the row cover that write.
 # The row names no unveil list, so no walk runs in front of the verb.
+#
+# `doctor` runs git for the library check and for the fix, so its row
+# unveils nothing too. It reads the settings file itself, and rpath
+# covers that read. It writes no file of its own: git writes every
+# byte of the fix.
 my %SANDBOX = (
-	hook => {
+	doctor => { promises => 'stdio rpath proc exec' },
+	hook   => {
 		promises => 'stdio rpath wpath cpath fattr proc exec inet dns'
 	},
 	traces => {
