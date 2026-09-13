@@ -5,6 +5,7 @@ App::FuguBench::Deps - the deps verb of fugubench
 =head1 SYNOPSIS
 
     fugubench [-C <dir>] deps [--dry-run] [--os <name>] [--arch <name>] <environment>
+    fugubench [-C <dir>] deps --update-sums [--force] [--os <name>] [--arch <name>]
 
 =head1 DESCRIPTION
 
@@ -12,7 +13,8 @@ B<App::FuguBench::Deps> holds the C<deps> verb. The verb reads the
 external dependencies that F<< deps/<OS>.txt >> names, and it prints
 the command of each one. The environments are C<tool>, C<runtime>,
 C<test>, and C<develop>, and the verb takes one of them as its
-argument.
+argument. C<--update-sums> records the digest of each download of the
+manifest, and it takes no environment word.
 
 The design comes from the synced F<scripts/deps> of Tooling. The
 trace of C<--dry-run> equals the trace of that script, line for line,
@@ -103,8 +105,9 @@ An absent file, and a file with no line, each give the empty set.
 
 Each key of the file holds a scheme, because the file gathers many
 upstreams. A key that is a file name comes from an older file. It
-matches no download of this verb, so it stops the run, and the
-message names C<deps --update-sums> as the repair.
+matches no download of this verb, so it stops an install, and the
+message names C<deps --update-sums> as the repair. The refresh reads
+the file with such a key, and it drops the one that it replaces.
 
 =head2 THE DOWNLOAD CHECK
 
@@ -236,23 +239,74 @@ A child that exits non-zero stops the run, and the message names the
 command. No later command of the environment runs, and the verb
 returns 1.
 
+=head2 THE DIGEST REFRESH
+
+C<deps --update-sums> records the digest of each download that the
+manifest of the system name names. The operator runs it, and the
+install path never does. It reads every environment of that one
+manifest, and it takes no environment word. It writes the digest
+file, so it takes no C<--dry-run>, and C<--force> belongs to it.
+
+The C<dist> entries and the C<bin> entries name every download of a
+manifest. A candidate URL that the file records already stays, so a
+version bump needs no hand edit.
+
+A digest covers a versioned name. Such a name carries a digit in the
+path of its URL, and a stable name carries none, or it holds
+F</releases/latest/>. The test reads the manifest, and never the
+network. A server that withholds its signature must not make the
+command pin the bytes that it serves.
+
+The command asks each distinct resolved directory of the candidates
+for a signed manifest, and never the directory of the template, which
+names no server. A manifest that answers keeps the entry off the
+digest tier, whether or not a key verifies it. An entry with a
+placeholder needs a recorded digest, and the signed manifest supplies
+it: a digest of the download itself would outrank the signature. An
+entry that reaches no candidate fails the run.
+
+Each other entry downloads. Each candidate takes a directory of its
+own, because two candidates can share a file name. A 404 is the
+absent answer of a candidate, and every other failed download stops
+the refresh. The command records the first candidate that answers,
+and it names each other one in a warning, because the install rejects
+a URL that two recorded candidates cover.
+
+C<--force> rewrites a recorded digest, pins a stable name, and
+overrides the signed-manifest test with a warning first. It drops
+every other recorded candidate of the same entry.
+
+The command drops a file-name key when it records the URL that
+replaces it, and it reports each drop. A key that one run cannot
+replace stays, because one run reads one manifest.
+
+A run that records nothing leaves the file as it was, and says so. A
+run with an entry that reached no candidate also leaves the file as
+it was, and it names the next step. The command reports a recorded
+URL only when it writes the file. The writer sorts the keys, so a
+second refresh makes a stable diff.
+
 =head1 RETURN VALUES
 
 C<command> returns a hash reference. Its body returns 0 after an
-install, 0 after the trace of a dry run, and 0 for a system name that
-the checkout holds no manifest for. A usage error returns 2: an
-unknown environment word, no environment word, more than one, and a
-bad C<--os> or C<--arch> word.
+install, 0 after the trace of a dry run, 0 after a refresh, and 0 for
+a system name that the checkout holds no manifest for. A usage error
+returns 2: an unknown environment word, no environment word, more
+than one, and a bad C<--os> or C<--arch> word. C<--update-sums> with
+an environment word, C<--update-sums> with C<--dry-run>, and
+C<--force> without C<--update-sums> each return 2 as well.
 
 A fault of a consumer file returns 3: a bad manifest line, a bad line
 of the digest file, a key of the digest file that is a file name, a
 bad key line, and an alias expansion that reaches no candidate or
-more than one.
+more than one. A refresh takes a key of the file-name form, and it
+returns 3 for a resolved URL that the digest file cannot hold.
 
 A failure of the run returns 1: an unset C<HOME>, a system name with
 no package manager, an entry that no tier covers, a failed download,
 a failed verification, a digest that does not match, and a child that
-exits non-zero.
+exits non-zero. A refresh returns 1 for an entry that reached no
+candidate, and for a digest file that it cannot write.
 
 =head1 FILES
 

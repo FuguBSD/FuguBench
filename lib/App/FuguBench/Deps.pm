@@ -111,35 +111,44 @@ my $FILE_NAME = qr{\A[A-Za-z0-9][A-Za-z0-9._-]*\z};
 sub command ( $, $ )
 {
 	return {
-		summary => 'install one dependency environment',
-		usage   => '[--dry-run] [--os <name>] [--arch <name>]'
-		    . ' <tool|runtime|test|develop>',
+		summary => 'install one dependency environment, or record'
+		    . ' the digests',
+		usage => '[--dry-run] [--os <name>] [--arch <name>]'
+		    . ' <tool|runtime|test|develop>'
+		    . ' | --update-sums [--force] [--os <name>]'
+		    . ' [--arch <name>]',
 		options => {
 			'dry-run' => 'print each command, and run none of them',
-			'os=s'    => 'the system name, in place of uname',
-			'arch=s'  => 'the machine name, in place of uname',
+			'update-sums' => 'record the digest of each download',
+			'force'       => 'rewrite a recorded digest, and pin a'
+			    . ' stable name',
+			'os=s'   => 'the system name, in place of uname',
+			'arch=s' => 'the machine name, in place of uname',
 		},
 		run => sub ( $app, @argv ) { return _run( $app, @argv ) },
 	};
 }
 
 # _run($app, @argv):
-#	The body of the verb. The argument is one environment word,
-#	and every other command line is a usage error.
+#	The body of the verb. The argument of an install is one
+#	environment word, and a refresh takes none. Every other
+#	command line is a usage error.
 sub _run ( $app, @argv )
 {
-	my $cli = $app->cli;
-	my $log = $cli->log;
+	my $cli    = $app->cli;
+	my $log    = $cli->log;
+	my $update = $cli->option('update-sums') ? 1 : 0;
 
-	return $cli->command_usage_error('deps') if @argv != 1;
-	my ($env) = @argv;
-	unless ( grep { $_ eq $env } ENVIRONMENTS ) {
-		$log->error(
-			q{unknown environment '%s': the environments are}
-			    . ' %s',
-			$env, join ', ', ENVIRONMENTS
-		);
-		return $cli->command_usage_error('deps');
+	# A refresh reads every environment of one manifest, so it
+	# keeps no environment word. The install path keeps one.
+	my $env;
+	if ($update) {
+		return $cli->command_usage_error('deps')
+		    unless _refresh_usage( $app, @argv );
+	}
+	else {
+		$env = _install_usage( $app, @argv );
+		return $cli->command_usage_error('deps') unless defined $env;
 	}
 
 	my $os   = $cli->option('os')   // ( uname() )[0];
@@ -168,8 +177,12 @@ sub _run ( $app, @argv )
 	my $by_type = _manifest( $app, $manifest, $env );
 	return Fugu::CLI::EXIT_CONFIG_ERROR() unless $by_type;
 
+	# A file-name key stops an install (DEPS-TIER-5), and a
+	# refresh drops the one that a recorded URL replaces
+	# (DEPS-SUMS-11).
+	my $file = File::Spec->catfile( $dir, 'SHA256.txt' );
 	my $digests =
-	    _digests( $app, File::Spec->catfile( $dir, 'SHA256.txt' ) );
+	    $update ? _recorded( $app, $file ) : _digests( $app, $file );
 	return Fugu::CLI::EXIT_CONFIG_ERROR() unless $digests;
 
 	my $keys = _keys( $app, $dir );
@@ -182,6 +195,7 @@ sub _run ( $app, @argv )
 		digests => $digests,
 		keys    => $keys,
 		dry     => $cli->option('dry-run') ? 1 : 0,
+		force   => $cli->option('force')   ? 1 : 0,
 		hold    => [],
 	};
 
@@ -191,6 +205,8 @@ sub _run ( $app, @argv )
 	# after the lines of the command that it names.
 	STDOUT->autoflush(1);
 
+	return _update_sums( $ctx, $file, $by_type ) if $update;
+
 	my $code = _install( $ctx, $by_type );
 	return $code unless $code == EXIT_SUCCESS;
 
@@ -199,6 +215,59 @@ sub _run ( $app, @argv )
 	say "installed the dependencies of $env" unless $ctx->{dry};
 
 	return EXIT_SUCCESS;
+}
+
+# _refresh_usage($app, @argv):
+#	1 for a command line that a refresh takes, and 0 for every
+#	other one, which the method reports (DEPS-SUMS-13).
+#
+#	A refresh reads every environment of one manifest, so it takes
+#	no environment word. It writes the digest file, so it takes no
+#	--dry-run.
+sub _refresh_usage ( $app, @argv )
+{
+	my $cli = $app->cli;
+	my $log = $cli->log;
+
+	if (@argv) {
+		$log->error(  '--update-sums reads every environment of the'
+			    . ' manifest, so it takes no environment word' );
+		return 0;
+	}
+	if ( $cli->option('dry-run') ) {
+		$log->error(  '--update-sums writes the digest file, so it'
+			    . ' takes no --dry-run' );
+		return 0;
+	}
+
+	return 1;
+}
+
+# _install_usage($app, @argv):
+#	The environment word of an install, or undef for a command
+#	line that no install takes, which the method reports.
+#
+#	--force belongs to --update-sums (DEPS-SUMS-13). An install
+#	that took it would write nothing, and the operator would read
+#	no word about the option that they gave.
+sub _install_usage ( $app, @argv )
+{
+	my $cli = $app->cli;
+	my $log = $cli->log;
+
+	if ( $cli->option('force') ) {
+		$log->error(q{--force belongs to '--update-sums'});
+		return;
+	}
+	return unless @argv == 1;
+
+	my ($env) = @argv;
+	return $env if grep { $_ eq $env } ENVIRONMENTS;
+
+	$log->error( q{unknown environment '%s': the environments are %s},
+		$env, join ', ', ENVIRONMENTS );
+
+	return;
 }
 
 # _install($ctx, $by_type):
@@ -473,12 +542,10 @@ sub _parse_digests ( $app, $file )
 #	pin without a word.
 sub _digests ( $app, $file )
 {
-	return {} unless -f $file;
-
-	my $digests = _parse_digests( $app, $file );
+	my $digests = _recorded( $app, $file );
 	return unless $digests;
 
-	my @legacy = grep { !m{\A[a-z][a-z0-9+.-]*://}i } sort keys %$digests;
+	my @legacy = _legacy($digests);
 	return $digests unless @legacy;
 
 	my $log = $app->cli->log;
@@ -492,6 +559,31 @@ sub _digests ( $app, $file )
 		    . ' that deps/ holds a manifest for' );
 
 	return;
+}
+
+# _recorded($app, $file):
+#	The digest set of deps/SHA256.txt, with every key that the
+#	file holds. An absent file, and a file with no line, each give
+#	the empty set.
+#
+#	A refresh reads the file through this method, because it drops
+#	a file-name key that it can replace, and keeps every other one
+#	(DEPS-SUMS-11). An install reads it through _digests, which
+#	stops on such a key.
+sub _recorded ( $app, $file )
+{
+	return {} unless -f $file;
+
+	return _parse_digests( $app, $file );
+}
+
+# _legacy($digests):
+#	Each key of a digest set that is a file name, in sorted order.
+#	Such a key comes from an older file, and the verb keys on the
+#	whole download URL (DEPS-TIER-5).
+sub _legacy ($digests)
+{
+	return grep { !m{\A[a-z][a-z0-9+.-]*://}i } sort keys %$digests;
 }
 
 # _keys($app, $dir):
@@ -1340,6 +1432,425 @@ sub _archive_type ($url)
 	return 'zip' if $url =~ /\.zip\z/;
 
 	return;
+}
+
+# _update_sums($ctx, $file, $by_type):
+#	Record the digest of each download that the manifest names,
+#	and write deps/SHA256.txt (DEPS-SUMS-1). The operator runs
+#	this command, and the install path never does.
+#
+#	The entries hold every environment of one manifest, because
+#	one digest file records every download of one operating
+#	system. The method returns the exit code of the run.
+sub _update_sums ( $ctx, $file, $by_type )
+{
+	my $sums = {
+		digests  => $ctx->{digests},
+		legacy   => [ _legacy( $ctx->{digests} ) ],
+		report   => [],
+		recorded => 0,
+		missed   => 0,
+	};
+
+	# The dist entries and the bin entries name every download of
+	# the manifest. A pkg name and a cpan name reach a package
+	# manager, which owns its own check.
+	my @urls = @{ $by_type->{dist} };
+	push @urls, ( split q{ }, $_, 3 )[1] for @{ $by_type->{bin} };
+
+	for my $url (@urls) {
+		my $code = _record( $ctx, $sums, $url );
+		return $code if $code != EXIT_SUCCESS;
+	}
+
+	return _write_sums( $ctx, $sums, $file );
+}
+
+# _write_sums($ctx, $sums, $file):
+#	End one refresh: report each line of the run, and write the
+#	digest file when the run recorded something (DEPS-SUMS-12).
+#	The method returns the exit code of the run.
+#
+#	A run with an entry that reached no candidate writes nothing,
+#	because a half state must not reach the recorded file. An
+#	operator must also read no success line for a state that makes
+#	the next install fail.
+sub _write_sums ( $ctx, $sums, $file )
+{
+	my $log = $ctx->{app}->cli->log;
+
+	if ( $sums->{missed} ) {
+		$log->error(
+			'%d entry of the manifest reached no candidate, and %s'
+			    . ' stays as it was',
+			$sums->{missed}, $file
+		);
+		$log->error(  '  check the URL of each entry, and check that'
+			    . ' --os and --arch name a platform of the release'
+		);
+		$log->error(  '  a signed manifest that names no candidate'
+			    . ' needs a release with a per-platform file name'
+		);
+		return EXIT_ERROR;
+	}
+
+	say for @{ $sums->{report} };
+
+	unless ( $sums->{recorded} ) {
+		say "recorded nothing, and $file stays as it was";
+		return EXIT_SUCCESS;
+	}
+
+	# The writer sorts the keys, so a second refresh makes a stable
+	# diff (DEPS-TIER-3).
+	my $text = _signify()->write_manifest( $sums->{digests} );
+	unless ( defined $text ) {
+		$log->error( '%s: %s', $file, _signify()->error );
+		return EXIT_ERROR;
+	}
+	unless ( Fugu::File->write( $file, $text ) ) {
+		$log->error( 'cannot write %s: %s', $file, $! );
+		return EXIT_ERROR;
+	}
+	say "wrote $file";
+
+	return EXIT_SUCCESS;
+}
+
+# _record($ctx, $sums, $url):
+#	Take one download of the manifest through the rules of the
+#	refresh. The method returns the exit code of the run:
+#	EXIT_SUCCESS for an entry that records, keeps, skips or
+#	misses, and another code for a fault that stops the refresh.
+#
+#	A candidate URL that the file records already stays, so a
+#	version bump needs no hand edit. This branch leaves a file
+#	that holds two candidates of one entry as it is, and --force
+#	repairs that. --force also repairs a digest that no longer
+#	matches the release.
+sub _record ( $ctx, $sums, $url )
+{
+	my $app = $ctx->{app};
+
+	# The alias words expand into the URL, and a candidate becomes
+	# a key of the digest file. The shape takes its check again
+	# after the expansion, so no run writes a line that a later run
+	# cannot read (DEPS-TIER-12).
+	my @candidate = _candidates( $url, $ctx->{os}, $ctx->{arch} );
+	for my $one (@candidate) {
+		return Fugu::CLI::EXIT_CONFIG_ERROR()
+		    unless _check_url( $app, $one->[0], 'the resolved URL' );
+	}
+
+	my @known =
+	    grep { exists $sums->{digests}{$_} } map { $_->[0] } @candidate;
+	if ( @known && !$ctx->{force} ) {
+
+		# The file holds the URL of this entry, so the file-name
+		# key that it replaces goes (DEPS-SUMS-11).
+		$sums->{recorded} += _drop_legacy( $sums, $known[0] );
+		push @{ $sums->{report} }, "kept $known[0]";
+		return EXIT_SUCCESS;
+	}
+
+	# A digest covers a versioned name, so a stable name stays on
+	# the signify tier (DEPS-SUMS-3). The test reads the manifest,
+	# and never the network.
+	if ( !$ctx->{force} && _stable($url) ) {
+		push @{ $sums->{report} }, "skipped the stable name: $url";
+		return EXIT_SUCCESS;
+	}
+
+	my $signed = _signed( $ctx, @candidate );
+	return EXIT_ERROR unless $signed;
+
+	my $code = _signed_entry( $ctx, $sums, $url, $signed, \@known );
+	return $code if defined $code;
+
+	return _download_sums( $ctx, $sums, $url, \@candidate, \@known );
+}
+
+# _stable($url):
+#	1 for a URL that names a stable download, and 0 for a
+#	versioned one (DEPS-SUMS-2). A versioned name carries a digit
+#	in the path of its URL. A stable name carries none, or it
+#	holds /releases/latest/.
+#
+#	An entry with a placeholder is never stable, because the
+#	resolution reads the digest file, and that entry then needs a
+#	recorded digest (DEPS-ALIAS-5).
+sub _stable ($url)
+{
+	return 0 if $url =~ /\{(?:os|arch)\}/;
+	return 1 if index( $url, '/releases/latest/' ) >= 0;
+
+	my ($path) = $url =~ m{\A[a-z][a-z0-9+.-]*://[^/]+(/.*)\z}i;
+
+	return !defined $path || $path !~ /[0-9]/ ? 1 : 0;
+}
+
+# _signed($ctx, @candidate):
+#	The answer of the signed-manifest probe over the candidates of
+#	one entry, as a hash with 'found', 'verified' and 'taken'. The
+#	method returns undef after a failure of the run, which it
+#	reports.
+#
+#	The probe asks each distinct resolved directory of the
+#	candidates, and never the directory of the template, which
+#	names no server (DEPS-SUMS-6). A manifest that answers keeps
+#	the entry off the digest tier, whether or not a key verifies
+#	it. A server that withholds the signature alone must not make
+#	the refresh pin the bytes that it serves (DEPS-SUMS-3).
+#
+#	'taken' holds the first candidate of the answering directory
+#	that the manifest names, with its digest, and the probe stops
+#	there. A verified manifest that names no candidate must not
+#	hide a later directory that holds the release (DEPS-SUMS-7).
+sub _signed ( $ctx, @candidate )
+{
+	my $answer = { found => 0, verified => 0 };
+
+	my %seen;
+	for my $one (@candidate) {
+		my $base = _base( $one->[0] );
+		next unless defined $base;
+		next if $seen{$base}++;
+
+		# Each probe takes a directory of its own. One shared
+		# path would let a later probe that finds nothing keep
+		# the manifest of an earlier answer.
+		my $dir  = _tempdir($ctx);
+		my $sums = File::Spec->catfile( $dir, 'SHA256' );
+		my $sig  = File::Spec->catfile( $dir, 'SHA256.sig' );
+
+		my $got = _probe( $ctx, "$base/SHA256", $sums );
+		return unless defined $got;
+		next   unless $got;
+
+		$answer->{found} = 1;
+		$got = _probe( $ctx, "$base/SHA256.sig", $sig );
+		return unless defined $got;
+		next   unless $got;
+
+		next unless _verify( $ctx, $sums, $sig );
+		$answer->{verified} = 1;
+
+		my $digests = _parse_digests( $ctx->{app}, $sums );
+		return unless $digests;
+
+		$answer->{taken} = _taken( $base, $digests, @candidate );
+		last if defined $answer->{taken};
+	}
+
+	return $answer;
+}
+
+# _taken($base, $digests, @candidate):
+#	The first candidate of one directory that the signed manifest
+#	of that directory names, with its digest, or undef.
+#
+#	The signed manifest keys on the file name, and the digest file
+#	keys on the URL. The candidate carries both, so it joins the
+#	two. A candidate of another directory names another release.
+sub _taken ( $base, $digests, @candidate )
+{
+	for my $one (@candidate) {
+		my $where = _base( $one->[0] );
+		next unless defined $where && $where eq $base;
+
+		my ($name) = $one->[0] =~ m{([^/]+)\z};
+		next unless defined $name && exists $digests->{$name};
+
+		return [ $one->[0], $digests->{$name} ];
+	}
+
+	return;
+}
+
+# _signed_entry($ctx, $sums, $url, $signed, $known):
+#	Take one entry whose directory holds a signed manifest. The
+#	method returns the exit code of the entry, or undef when the
+#	refresh must download the candidates itself.
+#
+#	A URL without a placeholder installs through the signify tier,
+#	so it needs no digest, and a recorded one would outrank the
+#	signature (DEPS-SUMS-5). A URL with a placeholder needs a
+#	digest, and the signed manifest is where it comes from
+#	(DEPS-SUMS-4).
+#
+#	--force overrides both, with a warning first (DEPS-SUMS-10).
+#	An upstream that publishes a manifest which the operator
+#	cannot verify would otherwise leave the entry unpinnable.
+sub _signed_entry ( $ctx, $sums, $url, $signed, $known )
+{
+	my $log = $ctx->{app}->cli->log;
+
+	return unless $signed->{found};
+
+	if ( $url !~ /\{(?:os|arch)\}/ ) {
+		unless ( $ctx->{force} ) {
+			push @{ $sums->{report} },
+			    "skipped the signed entry: $url";
+			return EXIT_SUCCESS;
+		}
+		_warn_force( $log, $url );
+
+		return;
+	}
+
+	my $taken = $signed->{taken};
+	if ( defined $taken ) {
+
+		# --force replaces the line of this entry, so every
+		# other recorded candidate of it goes (DEPS-SUMS-10).
+		_drop_siblings( $sums, $known, $taken->[0] ) if $ctx->{force};
+		_drop_legacy( $sums, $taken->[0] );
+		$sums->{digests}{ $taken->[0] } = $taken->[1];
+		$sums->{recorded}++;
+		push @{ $sums->{report} },
+		    "recorded $taken->[0] from the signed manifest";
+
+		return EXIT_SUCCESS;
+	}
+
+	unless ( $ctx->{force} ) {
+
+		# Without a digest this entry can never install, so the
+		# run must not report success (DEPS-SUMS-7).
+		$log->warning(
+			$signed->{verified}
+			? 'the signed manifest beside %s names no candidate'
+			: 'nothing verifies the signed manifest beside %s',
+			$url
+		);
+		$log->warning(q{  '--update-sums --force' pins the bytes}
+			    . ' that the server serves' );
+		$sums->{missed}++;
+
+		return EXIT_SUCCESS;
+	}
+	_warn_force( $log, $url );
+
+	return;
+}
+
+# _warn_force($log, $url):
+#	The warning of a --force that pins a URL of the signify tier
+#	(DEPS-SUMS-10).
+sub _warn_force ( $log, $url )
+{
+	$log->warning(
+		'--force pins a URL that a signed manifest covers, and the'
+		    . ' recorded digest then outranks the signature: %s',
+		$url
+	);
+
+	return;
+}
+
+# _download_sums($ctx, $sums, $url, $candidate, $known):
+#	Download each candidate of one entry, and record the digest of
+#	the first one that answers (DEPS-SUMS-9). The method returns
+#	the exit code of the entry.
+#
+#	Each candidate takes a directory of its own, because two
+#	candidates can share a file name (DEPS-SUMS-8). A 404 is the
+#	absent answer of a candidate, and every other failed download
+#	stops the refresh. An entry that no candidate answers fails
+#	the run (DEPS-SUMS-7).
+sub _download_sums ( $ctx, $sums, $url, $candidate, $known )
+{
+	my $log = $ctx->{app}->cli->log;
+
+	my @found;
+	for my $one (@$candidate) {
+		my ($name) = $one->[0] =~ m{([^/]+)\z};
+		next unless defined $name && $name ne q{};
+
+		my $path   = File::Spec->catfile( _tempdir($ctx), $name );
+		my $answer = _probe( $ctx, $one->[0], $path );
+		return EXIT_ERROR unless defined $answer;
+		next              unless $answer;
+
+		push @found, [ $one->[0], $path ];
+	}
+
+	unless (@found) {
+		$log->warning( 'no candidate answers for %s', $url );
+		$sums->{missed}++;
+
+		return EXIT_SUCCESS;
+	}
+
+	my ( $taken, $path ) = @{ $found[0] };
+	my $digest = _sha256($path);
+	unless ( defined $digest ) {
+		$log->error( 'cannot read %s: %s', $path, $! );
+		return EXIT_ERROR;
+	}
+
+	# --force replaces the line of this entry, so every other
+	# recorded candidate of it goes (DEPS-SUMS-10).
+	_drop_siblings( $sums, $known, $taken ) if $ctx->{force};
+	_drop_legacy( $sums, $taken );
+	$sums->{digests}{$taken} = $digest;
+	$sums->{recorded}++;
+	push @{ $sums->{report} }, "recorded $taken";
+
+	return EXIT_SUCCESS if @found == 1;
+
+	# The install rejects a URL that more than one recorded
+	# candidate covers, so the operator must see each other
+	# answer. The line of each one names it, and the recorded
+	# candidate stays out of that list.
+	$log->warning(
+		'more than one candidate answers for %s: the refresh records'
+		    . ' %s, and each candidate below stays out of the file',
+		$url, $taken
+	);
+	$log->warning( '  %s', $_->[0] ) for @found[ 1 .. $#found ];
+
+	return EXIT_SUCCESS;
+}
+
+# _drop_siblings($sums, $known, $taken):
+#	Remove every other recorded candidate of one entry, and report
+#	each one. Two recorded candidates make the install ambiguous
+#	(DEPS-ALIAS-3).
+sub _drop_siblings ( $sums, $known, $taken )
+{
+	for my $other (@$known) {
+		next if $other eq $taken;
+		delete $sums->{digests}{$other};
+		push @{ $sums->{report} }, "removed $other";
+	}
+
+	return;
+}
+
+# _drop_legacy($sums, $taken):
+#	Remove the file-name key that one recorded URL replaces, and
+#	report each one. The method returns the number of keys that it
+#	removed (DEPS-SUMS-11).
+#
+#	One run reads the manifest of one operating system, so a key
+#	that this run cannot replace stays. A blanket drop would take
+#	the pin of every other platform with it.
+sub _drop_legacy ( $sums, $taken )
+{
+	my ($name) = $taken =~ m{([^/]+)\z};
+	return 0 unless defined $name;
+
+	my $dropped = 0;
+	for my $key ( @{ $sums->{legacy} } ) {
+		next unless $key eq $name;
+		next unless exists $sums->{digests}{$key};
+		delete $sums->{digests}{$key};
+		push @{ $sums->{report} }, "dropped the file-name key $key";
+		$dropped++;
+	}
+
+	return $dropped;
 }
 
 # _command($ctx, @cmd):
