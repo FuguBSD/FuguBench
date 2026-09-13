@@ -167,11 +167,11 @@ sub _commands ($self)
 #	The row resolves here, after the option parse and before the
 #	verb, so a path of a row can come from an option.
 #
-#	A row that names the checkout root walks to it here, because
-#	the unveil hides the directories above that root. The walk
-#	reports nothing, and the verb reports a failed walk on its own
-#	call. A verb that rejects its argument list then reports the
-#	usage, and no configuration error (CLI-CHECKOUT-3).
+#	The unveil list of a row can name the checkout root, so the
+#	row walks to that root here. The walk reports nothing, and
+#	the verb reports a failed walk on its own call. A verb that
+#	rejects its argument list then reports the usage, and no
+#	configuration error (CLI-CHECKOUT-3).
 sub _sandbox ( $self, $verb, $subcommand = undef )
 {
 	my $row      = $SANDBOX{$verb};
@@ -257,8 +257,8 @@ sub child ($self)
 #	the program runs in a home with no .toolingrc.
 #
 #	The method returns undef when no .toolingrc sits above the
-#	start, and it names the start directory in the log. The verb
-#	then returns EXIT_CONFIG_ERROR.
+#	start. The call of the verb names the start directory in the
+#	log, and the verb then returns EXIT_CONFIG_ERROR.
 #
 #	The walk runs one time, and a failed walk stays failed. A
 #	sandbox row reads the checkout before the verb does, and that

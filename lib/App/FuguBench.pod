@@ -64,8 +64,8 @@ directory. A verb that reads no checkout never starts it, so
 C<fugubench version> runs in a home with no F<.toolingrc>.
 
 The method returns C<undef> when no F<.toolingrc> sits above the
-start, and it names the start directory in the log. The verb then
-returns the configuration code.
+start. The call of the verb names the start directory in the log, and
+the verb then returns the configuration code.
 
 The walk runs one time, and a failed walk stays failed. A sandbox row
 reads the checkout before the verb does, and that row reports nothing.
