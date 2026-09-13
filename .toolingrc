@@ -6,6 +6,7 @@ dist.name     App-FuguBench
 dist.module   App::FuguBench
 dist.abstract outfit a FuguBSD checkout for a coding agent
 dist.author   Dick Olsson <hi@senzilla.io>
+dist.perl     5.034
 dist.exe      bin/fugubench
 dist.testdir  t/fugubench
 dist.prereq   Fugu
