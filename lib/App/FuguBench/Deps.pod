@@ -21,11 +21,10 @@ F<t/fugubench/deps-conformance.t> holds that comparison, and no
 consumer file changes.
 
 Every download goes through L<Fugu::Curl>, and each download that a
-manifest names takes its check before anything reads it. The
-installers are absent. A run without C<--dry-run> therefore resolves
-each entry, downloads each file, and checks it. It names each command
-that an install runs, it runs none of them, it reports the absent
-installers, and it returns 1.
+manifest names takes its check before anything reads it. A run
+without C<--dry-run> then installs: the trace names each command, and
+the command runs as a child. On success the verb ends with one line
+that names the environment.
 
 =head2 command
 
@@ -184,17 +183,19 @@ probe.
 
 =head2 THE TRACE
 
-C<--dry-run> prints each command that the verb would run, as one line
-that starts with C<+ > and holds each argument shell-quoted. It runs
-none of them. A word passes bare when it holds word characters, a
-dot, a solidus, a colon, an equals sign, and a dash alone. Every
-other word, and the empty word, takes single quotes.
+The verb prints each command that it runs, as one line that starts
+with C<+ > and holds each argument shell-quoted. C<--dry-run> prints
+the same lines and runs none of the commands. A word passes bare when
+it holds word characters, a dot, a solidus, a colon, an equals sign,
+and a dash alone. Every other word, and the empty word, takes single
+quotes.
 
 The program gives no word to a shell. The quoting lets a reader of
 the trace see that an argument with a space is one argument.
 
-The trace is the standard output. Every progress line goes to the
-logger, which writes to standard error.
+The trace is the standard output, and so is the result line. Every
+progress line goes to the logger, which writes to standard error. No
+line of a child reaches the standard output.
 
 The verb downloads in-process, so the trace names the fetch verb:
 C<< fugubench fetch <file> <url> >>. Each download takes a temporary
@@ -206,39 +207,42 @@ beside it.
 The verb takes the entries of one environment in the order C<pkg>,
 C<dist>, C<cpan>, C<bin>. A package can give the toolchain that a
 dist build needs, and a dist can give a module that the cpan list
-builds on. A binary depends on nothing here. Each command below
-reaches the trace, and the run of it is absent.
+builds on. A binary depends on nothing here. Each command below runs
+as a child, and it takes the environment of the run.
 
 Every entry of a type resolves, and takes its tier check, before the
 first download of that type. A set with one entry that no tier covers
 therefore downloads nothing.
 
-The trace of a C<pkg> entry names the package manager of the
-platform: C<pkg_add> on OpenBSD, C<apt-get install -y> under C<sudo>
-on Linux, and C<brew install> on Darwin. On Linux an C<apt-get
-update> comes first, and every package of the environment reaches one
-command. A system name with no package manager is an error.
+A C<pkg> entry reaches the package manager of the platform:
+C<pkg_add> on OpenBSD, C<apt-get install -y> under C<sudo> on Linux,
+and C<brew install> on Darwin. On Linux an C<apt-get update> runs
+first, and every package of the environment reaches one command. A
+system name with no package manager is an error.
 
-The trace of a C<cpan> entry and of a C<dist> entry names
-C<cpanm --notest>. With C<PERL_LOCAL_LIB_ROOT> in the environment,
-the command takes C<--local-lib> with that value. The C<cpanm> on
-PATH is the first choice, and the bare name keeps the trace readable.
-Without one, the trace names the download of the standalone C<cpanm>
-script into a temporary directory, and this perl runs that script.
+A C<cpan> entry and a C<dist> entry reach C<cpanm --notest>. With
+C<PERL_LOCAL_LIB_ROOT> in the environment, the command takes
+C<--local-lib> with that value. The C<cpanm> on PATH is the first
+choice, and the bare name keeps the trace readable. Without one, the
+verb downloads the standalone C<cpanm> script into a temporary
+directory, and this perl runs that script.
 
-The trace of a C<bin> entry names the install into F<~/.local/bin>,
-with mode 755. The verb stops with an error when C<HOME> is unset,
-before it names one command. For an archive, the trace names tar or
-unzip over the one file of the entry, and the copy of that file
-alone.
+A C<bin> entry installs into F<~/.local/bin>, with mode 755. The verb
+stops with an error when C<HOME> is unset, before it runs one
+command. For an archive, tar or unzip unpacks the one file of the
+entry, and the verb copies that file alone.
+
+A child that exits non-zero stops the run, and the message names the
+command. No later command of the environment runs, and the verb
+returns 1.
 
 =head1 RETURN VALUES
 
-C<command> returns a hash reference. Its body returns 0 after the
-trace of a dry run, and 0 for a system name that the checkout holds
-no manifest for. A usage error returns 2: an unknown environment
-word, no environment word, more than one, and a bad C<--os> or
-C<--arch> word.
+C<command> returns a hash reference. Its body returns 0 after an
+install, 0 after the trace of a dry run, and 0 for a system name that
+the checkout holds no manifest for. A usage error returns 2: an
+unknown environment word, no environment word, more than one, and a
+bad C<--os> or C<--arch> word.
 
 A fault of a consumer file returns 3: a bad manifest line, a bad line
 of the digest file, a key of the digest file that is a file name, a
@@ -247,9 +251,8 @@ more than one.
 
 A failure of the run returns 1: an unset C<HOME>, a system name with
 no package manager, an entry that no tier covers, a failed download,
-a failed verification, and a digest that does not match. A run
-without C<--dry-run> that reaches the absent installers returns 1 as
-well.
+a failed verification, a digest that does not match, and a child that
+exits non-zero.
 
 =head1 FILES
 

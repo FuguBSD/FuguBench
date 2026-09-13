@@ -42,6 +42,11 @@ my $program = "$root/bin/fugubench";
 my $script  = "$root/scripts/deps";
 my $ftp     = "$root/scripts/ftp";
 
+# Fugu::Process gives a child the named environment alone, and CI
+# reaches the installed Fugu through PERL5LIB. Every child of this
+# test therefore carries it.
+my %LIB = defined $ENV{PERL5LIB} ? ( PERL5LIB => $ENV{PERL5LIB} ) : ();
+
 # The rule holds until Tooling retires the script.
 plan skip_all => 'scripts/deps is absent' unless -f $script;
 plan skip_all => 'scripts/ftp is absent'  unless -x $ftp;
@@ -133,7 +138,7 @@ sub _child ( $bin, $cmd, $cwd = undef )
 {
 	my $result = Fugu::Process->run(
 		cmd => $cmd,
-		env => { PATH => $bin, HOME => $home, TMPDIR => $tmp },
+		env => { PATH => $bin, HOME => $home, TMPDIR => $tmp, %LIB },
 		defined $cwd ? ( cwd => $cwd ) : (),
 	);
 	die "cannot run $cmd->[1]: $result->{error}\n"

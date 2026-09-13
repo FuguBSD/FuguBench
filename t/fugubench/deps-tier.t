@@ -5,8 +5,9 @@
 #
 # Each case runs bin/fugubench as a child with -Ilib. The child takes
 # HOME and TMPDIR inside a temporary tree, and it runs in that tree,
-# which holds no .toolingrc. PATH holds the directory of the
-# downloader alone, so no case resolves a cpanm.
+# which holds no .toolingrc. PATH holds the downloader of this host
+# and the three commands of a bin install, so no case resolves a
+# cpanm, and each install lands under HOME.
 #
 # No case asks the network. One forked server over the core
 # IO::Socket::INET answers on the loopback address, and each case
@@ -25,7 +26,7 @@ no feature qw(indirect multidimensional bareword_filehandles);
 
 use Test::More;
 use Digest::SHA    ();
-use File::Basename qw(dirname);
+use File::Basename qw(basename);
 use File::Copy     qw(copy);
 use File::Path     qw(make_path);
 use File::Temp     qw(tempdir);
@@ -41,6 +42,11 @@ my $repo    = "$RealBin/../..";
 my $program = "$repo/bin/fugubench";
 my $fixture = "$RealBin/deps/fixture";
 
+# Fugu::Process gives a child the named environment alone, and CI
+# reaches the installed Fugu through PERL5LIB. Every child of this
+# test therefore carries it.
+my %LIB = defined $ENV{PERL5LIB} ? ( PERL5LIB => $ENV{PERL5LIB} ) : ();
+
 # The verb verifies in-process, so the release of Fugu must hold the
 # downloader and the perl engine of the verifier.
 plan skip_all => 'the installed Fugu holds no Fugu::Curl'
@@ -53,13 +59,33 @@ plan skip_all => 'Fugu::Signify holds no perl engine'
 
 my $downloader = Fugu::Curl->new;
 plan skip_all => 'no downloader is on PATH' unless $downloader->is_available;
-my $bin = dirname( $downloader->command );
 
 my $tree = tempdir( CLEANUP => 1 );
 my $home = "$tree/home";
 my $tmp  = "$tree/tmp";
 my $srv  = "$tree/srv";
-make_path( $home, $tmp, "$srv/keys" );
+my $bin  = "$tree/bin";
+make_path( $home, $tmp, $bin, "$srv/keys" );
+
+# _link($path):
+#	One command of the child PATH, as a link to the command of
+#	this host.
+sub _link ($path)
+{
+	symlink $path, "$bin/" . basename($path) or die "symlink $path";
+
+	return;
+}
+
+# The PATH of each child: the downloader of this host, and the three
+# commands that a bin install runs. A case that passes its check
+# installs under HOME, which sits in the temporary tree.
+_link( $downloader->command );
+for my $name (qw(mkdir cp chmod)) {
+	my $found = Fugu::Process->find_command($name);
+	plan skip_all => "no $name is on PATH" unless defined $found;
+	_link($found);
+}
 
 # _slurp($path):
 #	The bytes of one file.
@@ -245,7 +271,7 @@ sub _child (@argv)
 {
 	my $result = Fugu::Process->run(
 		cmd => [ $^X, "-I$repo/lib", $program, @argv ],
-		env => { PATH => $bin, HOME => $home, TMPDIR => $tmp },
+		env => { PATH => $bin, HOME => $home, TMPDIR => $tmp, %LIB },
 		cwd => $tree,
 	);
 	die "cannot run $program: $result->{error}\n"
@@ -272,14 +298,14 @@ sub _bin ( $url, %file )
 }
 
 # The recorded tier holds the download to the digest of
-# deps/SHA256.txt (DEPS-TIER-6). The run then stops at the absent
-# installers, so that message is the answer of a check that passed.
+# deps/SHA256.txt (DEPS-TIER-6). The install then runs, and its
+# result line is the answer of a check that passed.
 {
 	my $url = _release('recorded') . '/tool-1.0.0';
 	my $r = _bin( $url, 'SHA256.txt' => "SHA256 ($url) = $ASSET\n" );
-	is( $r->{exit_code}, 1, 'the recorded tier reaches the absent install' );
+	is( $r->{exit_code}, 0, 'the recorded tier installs the entry' );
 	like(
-		$r->{stderr}, qr/the installers are absent/,
+		$r->{stdout}, qr/^installed the dependencies of test$/m,
 		'the recorded digest passes its check'
 	);
 	unlike( $r->{stderr}, qr/does not match/, 'the check reports nothing' );
@@ -300,7 +326,7 @@ sub _bin ( $url, %file )
 		'the message names the repair of the recorded tier'
 	);
 	unlike(
-		$r->{stderr}, qr/the installers are absent/,
+		$r->{stdout}, qr/installed the dependencies/,
 		'a failed check stops the run'
 	);
 }
@@ -310,13 +336,13 @@ sub _bin ( $url, %file )
 {
 	my $url = _release('signed') . '/tool-1.0.0';
 	my $r = _bin( $url, 'KEYS.txt' => "fugubench-test $KEY\n" );
-	is( $r->{exit_code}, 1, 'the signify tier reaches the absent install' );
+	is( $r->{exit_code}, 0, 'the signify tier installs the entry' );
 	like(
 		$r->{stderr}, qr/verified the manifest with the key fugubench-test/,
 		'the message names the key that verified the manifest'
 	);
 	like(
-		$r->{stderr}, qr/the installers are absent/,
+		$r->{stdout}, qr/^installed the dependencies of test$/m,
 		'the signed digest passes its check'
 	);
 }
@@ -338,7 +364,7 @@ sub _bin ( $url, %file )
 		'the message names the upstream report'
 	);
 	unlike(
-		$r->{stderr}, qr/the installers are absent/,
+		$r->{stdout}, qr/installed the dependencies/,
 		'a failed check stops the run'
 	);
 }
@@ -443,7 +469,7 @@ sub _bin ( $url, %file )
 		'the message names the failed verification'
 	);
 	unlike(
-		$r->{stderr}, qr/the installers are absent/,
+		$r->{stdout}, qr/installed the dependencies/,
 		'a failed verification stops the run'
 	);
 }

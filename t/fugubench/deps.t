@@ -28,6 +28,11 @@ use Fugu::Process;
 my $root    = "$RealBin/../..";
 my $program = "$root/bin/fugubench";
 
+# Fugu::Process gives a child the named environment alone, and CI
+# reaches the installed Fugu through PERL5LIB. Every child of this
+# test therefore carries it.
+my %LIB = defined $ENV{PERL5LIB} ? ( PERL5LIB => $ENV{PERL5LIB} ) : ();
+
 # The digest of one gitleaks asset. The value is a fixture of the
 # alias resolution, and no case downloads the file.
 my $SUM = 'b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5';
@@ -87,7 +92,7 @@ sub _child ( $dir, $env, @argv )
 			$^X,  "-I$root/lib", $program, '-C',
 			$dir, 'deps',        @argv
 		],
-		env => { PATH => $path, TMPDIR => $tmp, %$env },
+		env => { PATH => $path, TMPDIR => $tmp, %LIB, %$env },
 	);
 	die "cannot run $program: $result->{error}\n"
 	    if defined $result->{error};
@@ -439,21 +444,22 @@ sub _trace ($result)
 	is( $r->{stdout}, q{}, 'a bin entry without HOME writes no trace' );
 }
 
-# A run without --dry-run names each command and runs none of them,
-# because the installers are absent. The case holds one pkg entry, so
-# the run asks no network.
+# A run without --dry-run runs each command, and a command that PATH
+# does not hold stops it. PATH holds the stub cpanm alone, so no
+# package manager answers, and the case installs nothing.
 {
 	my $dir = _checkout( 'Darwin.txt' => "test pkg ok\n" );
 	my $r = _deps( $dir, '--os', 'Darwin', 'test' );
-	is( $r->{exit_code}, 1, 'a run without --dry-run exits 1' );
+	is( $r->{exit_code}, 1, 'an absent package manager exits 1' );
 	is_deeply(
 		[ _trace($r) ],
 		['brew install ok'],
-		'a run without --dry-run names each command'
+		'the trace names the command that the run tried'
 	);
-	like(
-		$r->{stderr}, qr/the installers are absent/,
-		'the message names the absent installers'
+	like( $r->{stderr}, qr/brew/, 'the message names the command' );
+	unlike(
+		$r->{stdout}, qr/installed the dependencies/,
+		'a failed run writes no result line'
 	);
 }
 
@@ -468,7 +474,7 @@ sub _trace ($result)
 			$^X, "-I$root/lib", $program, '-C',
 			$dir, 'deps', '--dry-run', '--os', 'Darwin', 'test'
 		],
-		env => { PATH => $bare, TMPDIR => $tmp, HOME => $home },
+		env => { PATH => $bare, TMPDIR => $tmp, HOME => $home, %LIB },
 	);
 	die "cannot run $program: $result->{error}\n"
 	    if defined $result->{error};

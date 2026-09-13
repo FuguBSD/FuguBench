@@ -63,10 +63,11 @@ use Fugu::Signify;
 # --dry-run prints each command and asks no network, so it reads the
 # manifest, the digest file and the key set alone (DEPS-MANIFEST-6).
 #
-# The installers are absent. A run without --dry-run therefore
-# resolves each entry, downloads each file, and checks it. It names
-# each command that an install runs, it runs none of them, and it
-# reports the absent installers.
+# Every other run installs. The trace names each command, and
+# $app->command then runs it as a child: a package manager, cpanm,
+# and the mkdir, tar, unzip, cp and chmod of a bin entry. No line of
+# a child reaches standard output (CLI-PROGRAM-4), and a child that
+# exits non-zero stops the run.
 
 # The environments of a manifest line (DEPS-MANIFEST-2).
 use constant ENVIRONMENTS => qw(tool runtime test develop);
@@ -184,18 +185,20 @@ sub _run ( $app, @argv )
 		hold    => [],
 	};
 
+	# The trace is standard output, and each line of a diagnostic
+	# is standard error, which Fugu::Log holds unbuffered. In a
+	# pipe that joins the two, a buffered trace line would land
+	# after the lines of the command that it names.
+	STDOUT->autoflush(1);
+
 	my $code = _install( $ctx, $by_type );
 	return $code unless $code == EXIT_SUCCESS;
-	return EXIT_SUCCESS if $ctx->{dry};
 
-	# The run verified each download and ran no command, because
-	# the installers are absent. A success would report an install
-	# that never ran.
-	$log->error(
-		'the installers are absent, and this run installed nothing');
-	$log->error('  the trace names each command that an install runs');
+	# The one result line of the verb (DEPS-INSTALL-10). A dry run
+	# installs nothing, so its trace is the whole standard output.
+	say "installed the dependencies of $env" unless $ctx->{dry};
 
-	return EXIT_ERROR;
+	return EXIT_SUCCESS;
 }
 
 # _install($ctx, $by_type):
@@ -609,14 +612,19 @@ sub _packages ( $ctx, @pkgs )
 	    ->cli->log->notice( 'the OS packages: %s', join q{ }, @pkgs );
 
 	if ( $os eq 'OpenBSD' ) {
-		_trace( $ctx, 'pkg_add', @pkgs );
+		return EXIT_ERROR
+		    unless _command( $ctx, 'pkg_add', @pkgs );
 	}
 	elsif ( $os eq 'Linux' ) {
-		_trace( $ctx, 'sudo', 'apt-get', 'update' );
-		_trace( $ctx, 'sudo', 'apt-get', 'install', '-y', @pkgs );
+		return EXIT_ERROR
+		    unless _command( $ctx, 'sudo', 'apt-get', 'update' );
+		return EXIT_ERROR
+		    unless _command( $ctx, 'sudo', 'apt-get', 'install', '-y',
+			@pkgs );
 	}
 	elsif ( $os eq 'Darwin' ) {
-		_trace( $ctx, 'brew', 'install', @pkgs );
+		return EXIT_ERROR
+		    unless _command( $ctx, 'brew', 'install', @pkgs );
 	}
 	else {
 		$ctx->{app}
@@ -655,7 +663,8 @@ sub _dists ( $ctx, @urls )
 		my ($asset) = _asset( $ctx, $url );
 		return EXIT_ERROR unless defined $asset;
 
-		_trace( $ctx, @cpanm, _options($ctx), $asset );
+		return EXIT_ERROR
+		    unless _command( $ctx, @cpanm, _options($ctx), $asset );
 	}
 
 	return EXIT_SUCCESS;
@@ -672,7 +681,8 @@ sub _modules ( $ctx, @modules )
 	my @cpanm = _cpanm($ctx);
 	return EXIT_ERROR unless @cpanm;
 
-	_trace( $ctx, @cpanm, _options($ctx), @modules );
+	return EXIT_ERROR
+	    unless _command( $ctx, @cpanm, _options($ctx), @modules );
 
 	return EXIT_SUCCESS;
 }
@@ -703,7 +713,7 @@ sub _bins ( $ctx, @bins )
 	}
 
 	my $bindir = File::Spec->catdir( $home, '.local', 'bin' );
-	_trace( $ctx, 'mkdir', '-p', $bindir );
+	return EXIT_ERROR unless _command( $ctx, 'mkdir', '-p', $bindir );
 
 	my @entry;
 	for my $bin (@bins) {
@@ -738,12 +748,16 @@ sub _bins ( $ctx, @bins )
 		return EXIT_ERROR unless defined $asset;
 
 		if ( defined $member ) {
-			_extract( $ctx, $dir, $file, $asset, $member );
+			return EXIT_ERROR
+			    unless _extract( $ctx, $dir, $file, $asset,
+				$member );
 		}
 		else {
-			_trace( $ctx, 'cp', $asset, $file );
+			return EXIT_ERROR
+			    unless _command( $ctx, 'cp', $asset, $file );
 		}
-		_trace( $ctx, 'chmod', '755', $file );
+		return EXIT_ERROR
+		    unless _command( $ctx, 'chmod', '755', $file );
 	}
 
 	return EXIT_SUCCESS;
@@ -754,18 +768,24 @@ sub _bins ( $ctx, @bins )
 #	(DEPS-INSTALL-7). tar unpacks a tar archive, and unzip unpacks
 #	a zip archive. Both unpack $member alone, into the temporary
 #	directory that holds the archive.
+#
+#	The method returns 1 after both commands, and 0 after a
+#	failure, which _command reports.
 sub _extract ( $ctx, $dir, $file, $archive, $member )
 {
 	if ( _archive_type($archive) eq 'tar' ) {
-		_trace( $ctx, 'tar', '-xzf', $archive, '-C', $dir, $member );
+		return 0
+		    unless _command( $ctx, 'tar', '-xzf', $archive, '-C',
+			$dir, $member );
 	}
 	else {
-		_trace( $ctx, 'unzip', '-q', $archive, $member, '-d', $dir );
+		return 0
+		    unless _command( $ctx, 'unzip', '-q', $archive, $member,
+			'-d', $dir );
 	}
-	_trace( $ctx, 'cp', File::Spec->catfile( $dir, split m{/}, $member ),
-		$file );
 
-	return;
+	return _command( $ctx, 'cp',
+		File::Spec->catfile( $dir, split m{/}, $member ), $file );
 }
 
 # _asset($ctx, $url):
@@ -1322,12 +1342,47 @@ sub _archive_type ($url)
 	return;
 }
 
+# _command($ctx, @cmd):
+#	Run one command of an install as a child, after the trace line
+#	that names it. A dry run prints the line and runs nothing
+#	(DEPS-MANIFEST-6).
+#
+#	The child takes the environment of the run, because a package
+#	manager and cpanm read it. No line of a child reaches standard
+#	output, because a child writes no part of the result
+#	(CLI-PROGRAM-4). $app->command writes the standard error of
+#	every child to standard error, and this method writes the
+#	standard output of a child that exits 0 there.
+#
+#	The method returns 1 for a child that exits 0, and 0 for every
+#	other answer, which it reports. A failed command stops the run,
+#	so no later command of the environment runs.
+sub _command ( $ctx, @cmd )
+{
+	_trace( $ctx, @cmd );
+	return 1 if $ctx->{dry};
+
+	my $app = $ctx->{app};
+	my $out = $app->command( \@cmd );
+	unless ( defined $out ) {
+		$app->cli->log->error( '%s', $app->error );
+		return 0;
+	}
+	print STDERR $out if length $out;
+
+	return 1;
+}
+
 # _trace($ctx, @cmd):
 #	Print one command of the run to standard output, as the line
 #	that starts with '+ ' and holds each argument shell-quoted
 #	(DEPS-MANIFEST-6). The trace is the oracle of
 #	CLI-CONFORMANCE-2, so the form of the line comes from the
 #	synced scripts/deps.
+#
+#	A download of the verb runs in-process, and its line names the
+#	fetch verb (DEPS-FETCH-2). Such a line reaches this method, and
+#	never _command.
 sub _trace ( $, @cmd )
 {
 	say '+ ', join q{ }, map { _quote($_) } @cmd;

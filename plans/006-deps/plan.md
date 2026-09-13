@@ -4,14 +4,13 @@
 
 In progress. Package 1 landed the manifest, the alias expansion, and the dry-run
 oracle. Package 2 landed the two tiers, the key set, and the `fetch` verb.
-Packages 3 and 4 remain. The Fugu release 0.5.0 carries Fugu LIB-CURL and Fugu
-LIB-ED25519, so no package waits on another repository. After the last package,
-Tooling ships the shim in place of `scripts/deps` and `scripts/ftp` in a plan of
-Tooling (D-09). Each consumer then drops its signify package from the `tool`
-environment (DEPS-TIER-8).
+Package 3 landed the installers. Package 4 remains. The Fugu release 0.5.0
+carries Fugu LIB-CURL and Fugu LIB-ED25519, so no package waits on another
+repository. After the last package, Tooling ships the shim in place of
+`scripts/deps` and `scripts/ftp` in a plan of Tooling (D-09). Each consumer then
+drops its signify package from the `tool` environment (DEPS-TIER-8).
 
-Implements: DEPS-MANIFEST. Implements: DEPS-INSTALL. Implements: DEPS-TIER.
-Implements: DEPS-SUMS.
+Implements: DEPS-TIER. Implements: DEPS-SUMS.
 
 Implements: CLI-VERBS. This plan adds the `deps` verb and the `fetch` verb. The
 unit stays `partial` until the last verb plan lands.
@@ -163,10 +162,6 @@ fixture is a copy, so a later manifest change of a consumer does not reach it.
 An implementer takes one package at a time, in this order. Each package trims
 the citations that it completes, and the last one deletes the plan.
 
-3. **The installers.** `pkg` through the package manager of the platform, `cpan`
-   and `dist` through cpanm with the bootstrap, and `bin` into `~/.local/bin`.
-   The acceptance check is `t/fugubench/deps-install.t` green, with no real
-   install on the host.
 4. **The digest refresh.** `--update-sums` with `--force`. The acceptance check
    is `t/fugubench/deps-sums.t` green.
 
@@ -223,9 +218,8 @@ exits 1.
 ## Acceptance
 
 - `make check` passes after each package, and the new tests run in `make test`.
-- Package 3 sets DEPS-MANIFEST and DEPS-INSTALL to `done`. Package 4 sets
-  DEPS-SUMS to `done`, and DEPS-TIER with it: the writer of DEPS-TIER-3 has no
-  caller before the digest refresh.
+- Package 4 sets DEPS-SUMS to `done`, and DEPS-TIER with it: the writer of
+  DEPS-TIER-3 has no caller before the digest refresh.
 - The change deletes this plan.
 
 ## Open questions
