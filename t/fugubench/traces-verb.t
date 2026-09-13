@@ -16,9 +16,10 @@
 # that the port leaves open sit here: a launch of the reviewer type,
 # and a sub-agent trace under a workflow directory.
 #
-# The failures and the columns run the program as a child, because a
-# failure reports on standard error. No test reads the operator home,
-# and no test writes outside its temp tree.
+# The failures run the program as a child, because a failure reports
+# on standard error. The columns run as a child too, because _entered
+# sends the standard output of the verb to a string. No test reads the
+# operator home, and no test writes outside its temp tree.
 
 use v5.34;
 use warnings;
@@ -225,7 +226,12 @@ subtest 'an argument is a usage error' => sub {
 	# of that walk waits for the verb, so no configuration error
 	# joins the usage (CLI-CHECKOUT-3).
 	my $bare = tempdir( CLEANUP => 1 );
-	my $b    = _run( $root, '-C', $bare, 'traces', 'extra' );
+	ok(
+		!defined App::FuguBench::Checkout->new( start => $bare ),
+		'the temporary tree sits under no checkout'
+	);
+
+	my $b = _run( $root, '-C', $bare, 'traces', 'extra' );
 	is( $b->{exit_code}, 2, 'a start under no .toolingrc exits 2 too' );
 	like(
 		$b->{stderr},
