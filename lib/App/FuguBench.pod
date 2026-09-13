@@ -75,8 +75,8 @@ start from a payload.
 C<command(\@cmd, %args)> runs one child command through
 C<< Fugu::Process->run >>. The command is an argument list, and it
 never reaches a shell. Every other argument reaches
-C<< Fugu::Process->run >>, so a caller names C<cwd>, C<stdin>, C<env>
-or C<timeout> there.
+C<< Fugu::Process->run >>, so a caller of the plain form names
+C<cwd>, C<stdin>, C<env> or C<timeout> there.
 
 The method writes the command line to standard error under
 C<--verbose>, before the child runs. After the child exits, it writes
@@ -92,6 +92,12 @@ tree uses this form.
 The two streams of that child arrive on two files of one temporary
 directory, because the start opens each stream by its path. One path
 for both streams would truncate the file twice.
+
+Every other argument of the group form reaches
+C<< Fugu::Process->spawn_command >>, which takes C<stdin>, C<env>
+and C<inherit>. It takes neither C<cwd> nor C<timeout>, and it drops
+each one in silence. A caller that needs one of those two uses the
+plain form.
 
 =head2 child
 

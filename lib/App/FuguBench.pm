@@ -292,6 +292,10 @@ sub command ( $self, $cmd, %args )
 #	streams to two files of one temporary directory. The method
 #	writes both files to standard error after the exit, because a
 #	child writes no part of the result (CLI-PROGRAM-4).
+#
+#	spawn_command takes stdin, env, and inherit, and it takes
+#	neither cwd nor timeout. A caller that needs one of those two
+#	uses the plain form.
 sub _group ( $self, $cmd, %args )
 {
 	my $dir = File::Temp->newdir(
@@ -313,13 +317,21 @@ sub _group ( $self, $cmd, %args )
 	}
 
 	$self->{child} = $result->{pid};
-	waitpid $result->{pid}, 0;
-	my $code = Fugu::Process->exit_code($?);
+	my $reaped = waitpid $result->{pid}, 0;
+	my $code   = Fugu::Process->exit_code($?);
 	$self->{child} = undef;
 
 	for my $file (@files) {
 		my $text = Fugu::File->read($file);
 		print STDERR $text if defined $text && length $text;
+	}
+
+	# A wait that reaps no child leaves the status of an earlier
+	# one in $?, so the code above belongs to no run of this
+	# command.
+	if ( $reaped != $result->{pid} ) {
+		$self->{error} = "$cmd->[0] left no status: $!";
+		return;
 	}
 
 	unless ( $code == 0 ) {
