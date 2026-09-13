@@ -33,6 +33,7 @@ use Fugu::Sandbox;
 
 use App::FuguBench::Checkout;
 use App::FuguBench::Deps;
+use App::FuguBench::Fetch;
 use App::FuguBench::Version;
 use App::FuguBench::Worktree;
 
@@ -57,6 +58,7 @@ my @VERBS = (
 	[ 'version',  'App::FuguBench::Version' ],
 	[ 'worktree', 'App::FuguBench::Worktree' ],
 	[ 'deps',     'App::FuguBench::Deps' ],
+	[ 'fetch',    'App::FuguBench::Fetch' ],
 );
 
 # The sandbox row of each verb (CLI-SANDBOX). A row names the pledge
@@ -77,13 +79,18 @@ my @VERBS = (
 # row. So the row unveils nothing either. The file promises cover the
 # manifest read and the digest file, `proc exec` covers each child,
 # and `inet dns` covers each download.
+#
+# `fetch` runs the downloader of Fugu::Curl as a child, which writes
+# its file beside the destination and renames it. So the row holds
+# the promises of `deps`, and it unveils nothing.
 my %SANDBOX = (
 	version  => { promises => 'stdio' },
 	worktree => {
 		promises    => 'stdio rpath wpath cpath fattr proc exec',
 		subcommands => { list => 'stdio rpath proc exec' },
 	},
-	deps => { promises => 'stdio rpath wpath cpath proc exec inet dns' },
+	deps  => { promises => 'stdio rpath wpath cpath proc exec inet dns' },
+	fetch => { promises => 'stdio rpath wpath cpath proc exec inet dns' },
 );
 
 # The global options, in the form of Fugu::CLI. new gives the table

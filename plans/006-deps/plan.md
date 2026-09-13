@@ -3,23 +3,18 @@
 ## Status
 
 In progress. Package 1 landed the manifest, the alias expansion, and the dry-run
-oracle. Packages 2, 3, and 4 remain. The Fugu release 0.5.0 carries Fugu
-LIB-CURL and Fugu LIB-ED25519, so no package waits on another repository. After
-the last package, Tooling ships the shim in place of `scripts/deps` and
-`scripts/ftp` in a plan of Tooling (D-09). Each consumer then drops its signify
-package from the `tool` environment (DEPS-TIER-8).
+oracle. Package 2 landed the two tiers, the key set, and the `fetch` verb.
+Packages 3 and 4 remain. The Fugu release 0.5.0 carries Fugu LIB-CURL and Fugu
+LIB-ED25519, so no package waits on another repository. After the last package,
+Tooling ships the shim in place of `scripts/deps` and `scripts/ftp` in a plan of
+Tooling (D-09). Each consumer then drops its signify package from the `tool`
+environment (DEPS-TIER-8).
 
 Implements: DEPS-MANIFEST. Implements: DEPS-INSTALL. Implements: DEPS-TIER.
-Implements: DEPS-KEYS. Implements: DEPS-SUMS. Implements: DEPS-FETCH.
+Implements: DEPS-SUMS.
 
 Implements: CLI-VERBS. This plan adds the `deps` verb and the `fetch` verb. The
 unit stays `partial` until the last verb plan lands.
-
-Implements: CLI-SANDBOX. This plan adds the rows of `deps` and `fetch`.
-
-Implements: CLI-FUGU. This plan adds the last two modules of the set: Fugu
-LIB-SIGNIFY with the engine of Fugu LIB-ED25519, and Fugu LIB-CURL. The unit
-goes to `done`.
 
 ## Purpose
 
@@ -81,10 +76,11 @@ the verb must not re-derive it. The probe reads `status` eq `http` with `code`
 the run with `error`. One `Fugu::Curl` serves the whole run.
 
 **Every signature check runs in-process.** The verb builds
-`Fugu::Signify->new(keys => \@paths, engine => 'perl')`. A body-form key becomes
-a two-line `.pub` file in the temporary directory, and a URL-form key downloads
-there and holds to its digest. A key that fails to load leaves the set with a
-warning (DEPS-KEYS-7), and an empty loaded set stops the run with each failure.
+`Fugu::Signify->new(engine => 'perl')`, and each `verify` call names the key
+paths, because the object holds no key set. A body-form key becomes a two-line
+`.pub` file in the temporary directory, and a URL-form key downloads there and
+holds to its digest. A key that fails to load leaves the set with a warning
+(DEPS-KEYS-7), and an empty loaded set stops the run with each failure.
 `verify($sums, $sig)` runs before the asset download (DEPS-TIER-7), and
 `parse_manifest` gives the digest of the file name. One check takes about one
 second under the pure-Perl backend, so the verb runs one for each signed entry.
@@ -167,10 +163,6 @@ fixture is a copy, so a later manifest change of a consumer does not reach it.
 An implementer takes one package at a time, in this order. Each package trims
 the citations that it completes, and the last one deletes the plan.
 
-2. **The tiers and the fetch verb.** The recorded tier, the signify tier, the
-   key set, the digest file through the Fugu reader and writer, and
-   `App::FuguBench::Fetch`. The acceptance check is `t/fugubench/deps-tier.t`
-   green on a Fugu release with both modules.
 3. **The installers.** `pkg` through the package manager of the platform, `cpan`
    and `dist` through cpanm with the bootstrap, and `bin` into `~/.local/bin`.
    The acceptance check is `t/fugubench/deps-install.t` green, with no real
@@ -231,9 +223,9 @@ exits 1.
 ## Acceptance
 
 - `make check` passes after each package, and the new tests run in `make test`.
-- Package 2 sets DEPS-TIER, DEPS-KEYS, DEPS-FETCH, and CLI-FUGU to `done`.
-  Package 3 sets DEPS-MANIFEST and DEPS-INSTALL to `done`, and package 4 sets
-  DEPS-SUMS to `done`.
+- Package 3 sets DEPS-MANIFEST and DEPS-INSTALL to `done`. Package 4 sets
+  DEPS-SUMS to `done`, and DEPS-TIER with it: the writer of DEPS-TIER-3 has no
+  caller before the digest refresh.
 - The change deletes this plan.
 
 ## Open questions

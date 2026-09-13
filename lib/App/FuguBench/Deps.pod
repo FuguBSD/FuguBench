@@ -4,7 +4,7 @@ App::FuguBench::Deps - the deps verb of fugubench
 
 =head1 SYNOPSIS
 
-    fugubench [-C <dir>] deps --dry-run [--os <name>] [--arch <name>] <environment>
+    fugubench [-C <dir>] deps [--dry-run] [--os <name>] [--arch <name>] <environment>
 
 =head1 DESCRIPTION
 
@@ -20,10 +20,12 @@ over the manifest of every consumer. The test
 F<t/fugubench/deps-conformance.t> holds that comparison, and no
 consumer file changes.
 
-The install of an entry needs the downloader, the digest check, and
-the installers. This distribution holds none of them, so the verb
-takes C<--dry-run> alone. A run without the option reports the absent
-install and returns 1.
+Every download goes through L<Fugu::Curl>, and each download that a
+manifest names takes its check before anything reads it. The
+installers are absent. A run without C<--dry-run> therefore resolves
+each entry, downloads each file, and checks it. It names each command
+that an install runs, it runs none of them, it reports the absent
+installers, and it returns 1.
 
 =head2 command
 
@@ -95,10 +97,90 @@ the URL, because only the URL selects the platform.
 F<deps/SHA256.txt> records a sha256 digest for each download with a
 versioned name, and the key is the whole download URL. The verb reads
 the file through the manifest reader of L<Fugu::Signify>, which
-rejects a bad line, a digest that is not 64 hexadecimal characters,
-and a duplicate key. A silent skip would drop a check.
+rejects a bad line, a blank line, a digest that is not 64 hexadecimal
+characters, and a duplicate key. A silent skip would drop a check.
 
 An absent file, and a file with no line, each give the empty set.
+
+Each key of the file holds a scheme, because the file gathers many
+upstreams. A key that is a file name comes from an older file. It
+matches no download of this verb, so it stops the run, and the
+message names C<deps --update-sums> as the repair.
+
+=head2 THE DOWNLOAD CHECK
+
+Each download lands in a temporary directory of its own, and the verb
+checks the bytes there. The signed manifest of a release lands beside
+the download, so a download named F<SHA256> would share one path with
+it.
+
+The recorded digest of F<deps/SHA256.txt> comes first, and the verb
+holds the download to it. Without one, the verb derives F<SHA256> and
+F<SHA256.sig> from the directory of the URL and fetches both. It
+verifies the signature, and then it holds the file to the digest that
+the manifest records for the file name. The signature covers the
+manifest, and the manifest covers the file, so the signature verifies
+before the file downloads.
+
+The two tiers key their digests apart. F<deps/SHA256.txt> gathers
+many upstreams, so it keys on the download URL. One release directory
+holds unique file names, so the signed manifest keys on the file
+name.
+
+The verification runs in-process, through L<Fugu::Signify> with the
+engine of L<Fugu::Ed25519>. No host needs signify(1), so a C<tool>
+entry takes the signify tier as every other entry does.
+
+An entry with no recorded digest and no declared key stops the run
+before the first download. A mismatch names the repair of its tier: a
+recorded digest names C<deps --update-sums --force>, and a signed
+digest names a report to the upstream, because the served file
+disagrees with the release.
+
+=head2 THE SIGNIFY KEYS
+
+The verb reads F<deps/KEYS.txt> and then F<deps/KEYS.local.txt>. The
+org pack owns the first file, and a consumer pins a third-party key
+in the second. A C<#> at the start of a line starts a comment.
+
+A key line holds a name and then one of two forms. Two fields give
+the key body, which is the second line of a signify public key file.
+Three fields give the URL of a key file and its sha256 digest, and
+the digest is the trust anchor. A key name holds letters, digits, a
+dot, a dash, and an underscore, and it appears one time. Each other
+shape is an error that names the line.
+
+The line order is the trust order, and the current key comes first.
+Every declared key verifies every signify-tier download, so no key
+binds to one entry.
+
+A key of the URL form downloads into a temporary directory on each
+use, and the verb holds it to the recorded digest. A cached copy
+would carry the check of an earlier entry. A key that fails its
+digest, and a key that no server answers, leave the trust order with
+a warning. The verb tries the next key, and it reports each failure
+when no key verifies.
+
+An empty key set is valid. The signify tier then stops with an error
+that names it.
+
+=head2 THE DOWNLOADS
+
+Every download of the verb goes through L<Fugu::Curl>: the release
+asset, the signed manifest, the key file, and the standalone C<cpanm>
+script. The C<cpanm> download is the one download with no check,
+because no manifest names it.
+
+The probe for a signed manifest reads a 404 as the normal answer, and
+the verb writes nothing about it. A failed download of a key file
+leaves the trust order with a warning. Every other failed download
+stops the run with the reason of the downloader. One L<Fugu::Curl>
+serves the whole run, because it resolves the command of the host one
+time.
+
+C<--dry-run> asks no network. It reads the manifest, the digest file
+and the key set, and it names the download of each entry without a
+probe.
 
 =head2 THE TRACE
 
@@ -125,7 +207,11 @@ The verb takes the entries of one environment in the order C<pkg>,
 C<dist>, C<cpan>, C<bin>. A package can give the toolchain that a
 dist build needs, and a dist can give a module that the cpan list
 builds on. A binary depends on nothing here. Each command below
-reaches the trace, and the install of it is absent.
+reaches the trace, and the run of it is absent.
+
+Every entry of a type resolves, and takes its tier check, before the
+first download of that type. A set with one entry that no tier covers
+therefore downloads nothing.
 
 The trace of a C<pkg> entry names the package manager of the
 platform: C<pkg_add> on OpenBSD, C<apt-get install -y> under C<sudo>
@@ -149,14 +235,21 @@ alone.
 =head1 RETURN VALUES
 
 C<command> returns a hash reference. Its body returns 0 after the
-trace, and 0 for a system name that the checkout holds no manifest
-for. A usage error returns 2: an unknown environment word, no
-environment word, more than one, and a bad C<--os> or C<--arch> word.
+trace of a dry run, and 0 for a system name that the checkout holds
+no manifest for. A usage error returns 2: an unknown environment
+word, no environment word, more than one, and a bad C<--os> or
+C<--arch> word.
 
 A fault of a consumer file returns 3: a bad manifest line, a bad line
-of the digest file, and an alias expansion that reaches no candidate
-or more than one. An unset C<HOME>, a system name with no package
-manager, and a run without C<--dry-run> each return 1.
+of the digest file, a key of the digest file that is a file name, a
+bad key line, and an alias expansion that reaches no candidate or
+more than one.
+
+A failure of the run returns 1: an unset C<HOME>, a system name with
+no package manager, an entry that no tier covers, a failed download,
+a failed verification, and a digest that does not match. A run
+without C<--dry-run> that reaches the absent installers returns 1 as
+well.
 
 =head1 FILES
 
@@ -170,11 +263,21 @@ The manifest of one system name, relative to the start directory.
 
 The recorded digest of each download, keyed on the download URL.
 
+=item F<deps/KEYS.txt>
+
+The signify public keys of the org pack, in trust order.
+
+=item F<deps/KEYS.local.txt>
+
+The signify public keys that this consumer pins. The verb reads them
+after the keys of the org pack.
+
 =back
 
 =head1 SEE ALSO
 
-L<App::FuguBench>, L<Fugu::CLI>, L<Fugu::File>, L<Fugu::Log>,
+L<App::FuguBench>, L<App::FuguBench::Fetch>, L<Fugu::CLI>,
+L<Fugu::Curl>, L<Fugu::Ed25519>, L<Fugu::File>, L<Fugu::Log>,
 L<Fugu::Process>, L<Fugu::Signify>
 
 =head1 AUTHORS

@@ -84,11 +84,14 @@ sub _stub ( $dir, $name, $body )
 }
 
 # _fixtures():
-#	Each fixture directory, in sorted order.
+#	Each consumer fixture directory, in sorted order. A consumer
+#	fixture holds a deps/ directory, and the tier fixtures of
+#	t/fugubench/deps-tier.t hold none.
 sub _fixtures ()
 {
 	opendir my $dh, "$RealBin/deps" or die 'the fixtures are absent';
-	my @names = sort grep { !m{\A[.]} } readdir $dh;
+	my @names = sort grep { !m{\A[.]} && -d "$RealBin/deps/$_/deps" }
+	    readdir $dh;
 	closedir $dh;
 
 	return map { "$RealBin/deps/$_" } @names;

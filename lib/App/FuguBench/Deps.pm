@@ -22,11 +22,13 @@ use warnings;
 use experimental 'signatures';
 no feature qw(indirect multidimensional bareword_filehandles);
 
-use File::Spec ();
-use File::Temp ();
-use POSIX      qw(uname);
+use Digest::SHA ();
+use File::Spec  ();
+use File::Temp  ();
+use POSIX       qw(uname);
 
 use Fugu::CLI qw(EXIT_SUCCESS EXIT_ERROR);
+use Fugu::Curl;
 use Fugu::File;
 use Fugu::Process;
 use Fugu::Signify;
@@ -49,10 +51,22 @@ use Fugu::Signify;
 # (DEPS-MANIFEST-3). A bad line of another environment would
 # otherwise stay invisible until someone installs that environment.
 #
-# The install of an entry needs the downloader, the digest check, and
-# the installers. The program holds none of them, so the verb takes
-# --dry-run alone, and it prints the trace of each command that it
-# would run.
+# Every download goes through Fugu::Curl (DEPS-FETCH-1). Each
+# download that a manifest names takes its check before anything
+# reads it (DEPS-TIER-1), and the standalone cpanm script is the one
+# download that no manifest names (DEPS-INSTALL-4). A recorded digest
+# of deps/SHA256.txt comes first. Without one, the verb fetches the
+# signed SHA256 manifest that sits beside the download, and
+# Fugu::Signify verifies it in-process against the declared keys
+# (DEPS-TIER-8).
+#
+# --dry-run prints each command and asks no network, so it reads the
+# manifest, the digest file and the key set alone (DEPS-MANIFEST-6).
+#
+# The installers are absent. A run without --dry-run therefore
+# resolves each entry, downloads each file, and checks it. It names
+# each command that an install runs, it runs none of them, and it
+# reports the absent installers.
 
 # The environments of a manifest line (DEPS-MANIFEST-2).
 use constant ENVIRONMENTS => qw(tool runtime test develop);
@@ -97,7 +111,7 @@ sub command ( $, $ )
 {
 	return {
 		summary => 'install one dependency environment',
-		usage   => '--dry-run [--os <name>] [--arch <name>]'
+		usage   => '[--dry-run] [--os <name>] [--arch <name>]'
 		    . ' <tool|runtime|test|develop>',
 		options => {
 			'dry-run' => 'print each command, and run none of them',
@@ -143,12 +157,6 @@ sub _run ( $app, @argv )
 		return $cli->command_usage_error('deps');
 	}
 
-	unless ( $cli->option('dry-run') ) {
-		$log->error(  'the install is absent, so the verb takes'
-			    . ' --dry-run alone' );
-		return EXIT_ERROR;
-	}
-
 	my $dir      = File::Spec->catdir( $app->start, 'deps' );
 	my $manifest = File::Spec->catfile( $dir, "$os.txt" );
 	unless ( -f $manifest ) {
@@ -163,15 +171,31 @@ sub _run ( $app, @argv )
 	    _digests( $app, File::Spec->catfile( $dir, 'SHA256.txt' ) );
 	return Fugu::CLI::EXIT_CONFIG_ERROR() unless $digests;
 
-	return _install( {
-			app     => $app,
-			os      => $os,
-			arch    => $arch,
-			digests => $digests,
-			hold    => [],
-		},
-		$by_type
-	);
+	my $keys = _keys( $app, $dir );
+	return Fugu::CLI::EXIT_CONFIG_ERROR() unless $keys;
+
+	my $ctx = {
+		app     => $app,
+		os      => $os,
+		arch    => $arch,
+		digests => $digests,
+		keys    => $keys,
+		dry     => $cli->option('dry-run') ? 1 : 0,
+		hold    => [],
+	};
+
+	my $code = _install( $ctx, $by_type );
+	return $code unless $code == EXIT_SUCCESS;
+	return EXIT_SUCCESS if $ctx->{dry};
+
+	# The run verified each download and ran no command, because
+	# the installers are absent. A success would report an install
+	# that never ran.
+	$log->error(
+		'the installers are absent, and this run installed nothing');
+	$log->error('  the trace names each command that an install runs');
+
+	return EXIT_ERROR;
 }
 
 # _install($ctx, $by_type):
@@ -391,19 +415,32 @@ sub _check_bin_names ( $app, $name, $member, $where )
 	return 1;
 }
 
-# _digests($app, $file):
-#	The digest of each download that deps/SHA256.txt records, as a
-#	hash of URL to digest (DEPS-TIER-3). An absent file, and a
-#	file with no line, each give the empty set.
+# _signify():
+#	The one Fugu::Signify of the run. The perl engine parses the
+#	signify(1) formats itself and checks a signature with
+#	Fugu::Ed25519, so no host needs signify(1) (DEPS-TIER-8).
 #
-#	Every other file goes to the manifest reader of Fugu::Signify,
-#	which rejects a bad line, a digest that is not 64 hexadecimal
-#	characters, and a duplicate key (DEPS-TIER-4). A silent skip
-#	would drop a check.
-sub _digests ( $app, $file )
+#	The object holds no key set, and each verification names its
+#	own keys. It also parses the SHA256 manifest form, which both
+#	tiers read, and the public key file of a key line.
+sub _signify ()
 {
-	return {} unless -f $file;
+	state $signify = Fugu::Signify->new( engine => 'perl' );
 
+	return $signify;
+}
+
+# _parse_digests($app, $file):
+#	The digest of each line of one SHA256 manifest, as a hash of
+#	key to digest, through the manifest reader of Fugu::Signify
+#	(DEPS-TIER-3). The reader rejects a bad line, a digest that is
+#	not 64 hexadecimal characters, a blank line, and a duplicate
+#	key (DEPS-TIER-4). A silent skip would drop a check.
+#
+#	A file with no line gives the empty set. The method reports a
+#	file that it cannot read or parse, and returns undef.
+sub _parse_digests ( $app, $file )
+{
 	my $log  = $app->cli->log;
 	my $text = Fugu::File->read($file);
 	unless ( defined $text ) {
@@ -412,14 +449,153 @@ sub _digests ( $app, $file )
 	}
 	return {} if $text =~ /\A\s*\z/;
 
-	my $reader  = Fugu::Signify->new;
-	my $digests = $reader->parse_manifest($text);
+	my $digests = _signify()->parse_manifest($text);
 	unless ($digests) {
-		$log->error( '%s: %s', $file, $reader->error );
+		$log->error( '%s: %s', $file, _signify()->error );
 		return;
 	}
 
 	return $digests;
+}
+
+# _digests($app, $file):
+#	The digest of each download that deps/SHA256.txt records, as a
+#	hash of URL to digest (DEPS-TIER-3). An absent file, and a
+#	file with no line, each give the empty set.
+#
+#	Each key of this file holds a scheme, because the file gathers
+#	many upstreams and keys on the whole download URL. A key that
+#	is a file name comes from an older file (DEPS-TIER-5). It
+#	matches no download of this verb, so the entry would lose its
+#	pin without a word.
+sub _digests ( $app, $file )
+{
+	return {} unless -f $file;
+
+	my $digests = _parse_digests( $app, $file );
+	return unless $digests;
+
+	my @legacy = grep { !m{\A[a-z][a-z0-9+.-]*://}i } sort keys %$digests;
+	return $digests unless @legacy;
+
+	my $log = $app->cli->log;
+	$log->error(
+		'%s keys on the file name, and the verb keys on the whole'
+		    . ' download URL',
+		$file
+	);
+	$log->error( '  %s', $_ ) for @legacy;
+	$log->error(  q{  run 'deps --update-sums' for each operating system}
+		    . ' that deps/ holds a manifest for' );
+
+	return;
+}
+
+# _keys($app, $dir):
+#	The declared signify keys, in the order that deps/KEYS.txt and
+#	then deps/KEYS.local.txt name them (DEPS-KEYS-1). The order is
+#	the trust order, and the current key comes first
+#	(DEPS-KEYS-3). An absent file carries no key, and an empty set
+#	is valid (DEPS-KEYS-5).
+#
+#	A # at the start of a line starts a comment. The method
+#	reports the first bad line and returns undef.
+sub _keys ( $app, $dir )
+{
+	my $log = $app->cli->log;
+
+	my ( @keys, %seen );
+	for my $name (qw(KEYS.txt KEYS.local.txt)) {
+		my $file = File::Spec->catfile( $dir, $name );
+		next unless -f $file;
+
+		my $text = Fugu::File->read($file);
+		unless ( defined $text ) {
+			$log->error( 'cannot read %s', $file );
+			return;
+		}
+
+		my $n = 0;
+		for my $line ( split /\n/, $text ) {
+			$n++;
+			next if $line =~ /\A\s*(?:#|\z)/;
+
+			my $where = "$file:$n";
+			my $key   = _key( $app, [ split q{ }, $line ], $where );
+			return unless $key;
+
+			if ( $seen{ $key->{name} }++ ) {
+				$log->error( '%s: duplicate key name: %s',
+					$where, $key->{name} );
+				return;
+			}
+			push @keys, $key;
+		}
+	}
+
+	return \@keys;
+}
+
+# _key($app, $field, $where):
+#	One key of a key line, as a hash with the name and either the
+#	key body or the URL and the digest (DEPS-KEYS-2). Two fields
+#	give the body form, and three give the URL form, whose digest
+#	is the trust anchor.
+#
+#	The method reports a bad line and returns undef (DEPS-KEYS-4).
+sub _key ( $app, $field, $where )
+{
+	my $log = $app->cli->log;
+
+	# The name becomes a file name in a temporary directory, so it
+	# holds no path.
+	unless ( defined $field->[0] && $field->[0] =~ $FILE_NAME ) {
+		$log->error(
+			'%s: a key name holds letters, digits, a dot, a dash,'
+			    . ' and an underscore',
+			$where
+		);
+		return;
+	}
+
+	if ( @$field == 2 ) {
+		my $key = { name => $field->[0], body => $field->[1] };
+
+		# The body is the second line of a signify public key
+		# file, so the parser of Fugu::Signify holds it to the
+		# 42 bytes and the prefix of that form.
+		return $key if _signify()->parse_public_key( _key_text($key) );
+
+		$log->error( '%s: not a signify key body: %s',
+			$where, _signify()->error );
+		return;
+	}
+
+	if ( @$field == 3 ) {
+		return {
+			name   => $field->[0],
+			url    => $field->[1],
+			digest => $field->[2],
+		    }
+		    if $field->[2] =~ /\A[0-9a-f]{64}\z/;
+
+		$log->error( '%s: not a sha256 digest: %s',
+			$where, $field->[2] );
+		return;
+	}
+
+	$log->error( '%s: a key line holds two or three fields', $where );
+
+	return;
+}
+
+# _key_text($key):
+#	The two lines of a signify public key file. signify(1) reads
+#	the comment line and carries no trust in it, so one word of a
+#	key line holds the whole key.
+sub _key_text ($key)
+{
+	return "untrusted comment: $key->{name} public key\n$key->{body}\n";
 }
 
 # _packages($ctx, @pkgs):
@@ -465,10 +641,16 @@ sub _dists ( $ctx, @urls )
 	for my $url (@urls) {
 		my ($value) = _resolve( $ctx, $url, undef );
 		return Fugu::CLI::EXIT_CONFIG_ERROR() unless defined $value;
+
+		# An entry that no tier covers stops the run before the
+		# first download (DEPS-INSTALL-9).
+		return EXIT_ERROR unless _check_tier( $ctx, $value );
 		push @resolved, $value;
 	}
 
 	my @cpanm = _cpanm($ctx);
+	return EXIT_ERROR unless @cpanm;
+
 	for my $url (@resolved) {
 		my ($asset) = _asset( $ctx, $url );
 		return EXIT_ERROR unless defined $asset;
@@ -488,6 +670,8 @@ sub _modules ( $ctx, @modules )
 	    ->cli->log->notice( 'the CPAN modules: %s', join q{ }, @modules );
 
 	my @cpanm = _cpanm($ctx);
+	return EXIT_ERROR unless @cpanm;
+
 	_trace( $ctx, @cpanm, _options($ctx), @modules );
 
 	return EXIT_SUCCESS;
@@ -538,6 +722,11 @@ sub _bins ( $ctx, @bins )
 		    unless _check_bin_names( $app, $name, $member,
 			"the resolved entry $name" );
 
+		# An entry that no tier covers stops the run here, while
+		# the install directory is still as it was
+		# (DEPS-INSTALL-9).
+		return EXIT_ERROR unless _check_tier( $ctx, $url );
+
 		push @entry, [ $name, $url, $member ];
 	}
 
@@ -580,14 +769,18 @@ sub _extract ( $ctx, $dir, $file, $archive, $member )
 }
 
 # _asset($ctx, $url):
-#	The path of one download, and the temporary directory that
-#	holds it, in that order (DEPS-TIER-1). The method writes the
-#	trace line of the fetch, which names the fetch verb
+#	The path of one checked download, and the temporary directory
+#	that holds it, in that order (DEPS-TIER-1). The method writes
+#	the trace line of the fetch, which names the fetch verb
 #	(DEPS-FETCH-2).
 #
 #	The signed manifest of a release lands beside the download, so
 #	a download named SHA256 would share one path with it. The
 #	download therefore takes a directory of its own.
+#
+#	A dry run names the file and asks no network
+#	(DEPS-MANIFEST-6). Every other run downloads the file and
+#	checks it, and it returns the empty list on a failure.
 sub _asset ( $ctx, $url )
 {
 	my $dir = _tempdir($ctx);
@@ -603,7 +796,338 @@ sub _asset ( $ctx, $url )
 	my $file = File::Spec->catfile( $asset, $name );
 	_trace( $ctx, $ctx->{app}->cli->name, 'fetch', $file, $url );
 
+	return ( $file, $dir ) if $ctx->{dry};
+	return unless _verified( $ctx, $url, $file, $dir );
+
 	return ( $file, $dir );
+}
+
+# _check_tier($ctx, $url):
+#	Report an entry that no tier can check (DEPS-TIER-9). The
+#	check reads the digest file and the key set alone, so a caller
+#	runs it over every entry before the first download.
+#
+#	A tool entry takes the signify tier as every other entry does,
+#	because the check runs in-process and needs no signify(1) on
+#	the host (DEPS-TIER-8).
+sub _check_tier ( $ctx, $url )
+{
+	return 1 if exists $ctx->{digests}{$url};
+	return 1 if @{ $ctx->{keys} };
+
+	my $log = $ctx->{app}->cli->log;
+	$log->error(
+		'%s has no recorded digest, and no key is declared, so nothing'
+		    . ' verifies it',
+		$url
+	);
+	$log->error(  q{  a versioned URL takes a digest from}
+		    . q{ 'deps --update-sums'} );
+	$log->error(  '  a stable URL needs a signed SHA256 beside it, and a'
+		    . ' key in deps/KEYS.local.txt' );
+
+	return 0;
+}
+
+# _verified($ctx, $url, $file, $dir):
+#	Download one file and hold it to its digest. The method
+#	returns 1 after a check that passes, and 0 after every
+#	failure, which it reports.
+#
+#	The recorded digest of deps/SHA256.txt comes first
+#	(DEPS-TIER-6). Without one, the method derives SHA256 and
+#	SHA256.sig from the directory of the URL, verifies the
+#	signature, and holds the file to the signed manifest
+#	(DEPS-TIER-7). The signature covers the manifest, and the
+#	manifest covers the file, so the signature verifies before the
+#	file downloads.
+sub _verified ( $ctx, $url, $file, $dir )
+{
+	my $log = $ctx->{app}->cli->log;
+
+	my $want = $ctx->{digests}{$url};
+	if ( defined $want ) {
+		return 0 unless _fetch_file( $ctx, $url, $file );
+
+		return _check_digest( $ctx, $file, $want, $url, 'recorded' );
+	}
+
+	my $base = _base($url);
+	unless ( defined $base ) {
+		$log->error( 'the URL names no directory: %s', $url );
+		return 0;
+	}
+
+	my $sums = File::Spec->catfile( $dir, 'SHA256' );
+	my $sig  = File::Spec->catfile( $dir, 'SHA256.sig' );
+	for my $part ( [ $sums, 'SHA256' ], [ $sig, 'SHA256.sig' ] ) {
+		my $answer = _probe( $ctx, "$base/$part->[1]", $part->[0] );
+		return 0 unless defined $answer;
+		next if $answer;
+
+		$log->error(
+			'the signify tier needs %s/%s, and the server does not'
+			    . ' answer it',
+			$base, $part->[1] );
+		$log->error(  '  a release that publishes no signature needs a'
+			    . ' recorded digest' );
+		$log->error(
+			q{  'deps --update-sums' records a versioned URL, and}
+			    . q{ '--update-sums --force' records any URL} );
+		return 0;
+	}
+
+	return 0 unless _verify( $ctx, $sums, $sig );
+
+	# The signed manifest of a release covers one directory with
+	# unique file names, so it keys on the file name.
+	my $signed = _parse_digests( $ctx->{app}, $sums );
+	return 0 unless $signed;
+
+	my ($name) = $url =~ m{([^/]+)\z};
+	my $signed_want = $signed->{$name};
+	unless ( defined $signed_want ) {
+		$log->error( 'the signed manifest of %s does not name %s',
+			$base, $name );
+		return 0;
+	}
+
+	return 0 unless _fetch_file( $ctx, $url, $file );
+
+	return _check_digest( $ctx, $file, $signed_want, $name, 'signed' );
+}
+
+# _verify($ctx, $sums, $sig):
+#	Verify the signature over one SHA256 manifest with the
+#	declared keys, in trust order. The method returns the path of
+#	the key file that verified it, and undef after a failure,
+#	which it reports.
+#
+#	Fugu::Signify reads each key file under the perl engine, so no
+#	host needs signify(1) (DEPS-TIER-8). An empty key set stops
+#	the signify tier (DEPS-KEYS-5).
+sub _verify ( $ctx, $sums, $sig )
+{
+	my $log  = $ctx->{app}->cli->log;
+	my $keys = $ctx->{keys};
+
+	unless (@$keys) {
+		$log->error( 'no key is declared, so no signature verifies %s',
+			$sums );
+		return;
+	}
+
+	# Each verification builds the key set again, in a directory
+	# of its own (DEPS-KEYS-6). A cached copy would carry the
+	# check of an earlier entry.
+	my $dir = _tempdir($ctx);
+	my ( @paths, %name, @failed );
+	for my $key (@$keys) {
+		my ( $path, $why ) = _key_file( $ctx, $dir, $key );
+		unless ( defined $path ) {
+
+			# A key that fails its digest, and a key that no
+			# server answers, must not stop the trust order
+			# (DEPS-KEYS-7). The operator must still see it.
+			$log->warning( 'the key %s did not load: %s',
+				$key->{name}, $why );
+			push @failed, "$key->{name}: $why";
+			next;
+		}
+		$name{$path} = $key->{name};
+		push @paths, $path;
+	}
+
+	unless (@paths) {
+		$log->error(
+			'no declared key loaded, so no signature verifies'
+			    . ' %s',
+			$sums
+		);
+		$log->error( '  %s', $_ ) for @failed;
+		return;
+	}
+
+	my $public = _signify()->verify(
+		keys      => \@paths,
+		file      => $sums,
+		signature => $sig
+	);
+	unless ( defined $public ) {
+		$log->error( 'no declared key verifies the signature of %s',
+			$sums );
+		$log->error( '  %s', $_ )
+		    for _reasons( _signify()->error ), @failed;
+		return;
+	}
+
+	$log->notice( 'verified the manifest with the key %s', $name{$public} );
+
+	return $public;
+}
+
+# _key_file($ctx, $dir, $key):
+#	The path of one public key file in a temporary directory, or
+#	undef and the reason of the failure, in that order.
+#
+#	The body form writes the two lines of a signify public key
+#	file. The URL form downloads the published file and holds it
+#	to the recorded digest, which is the trust anchor
+#	(DEPS-KEYS-2). A failed check leaves no file behind for a
+#	later use.
+sub _key_file ( $ctx, $dir, $key )
+{
+	my $path = File::Spec->catfile( $dir, "$key->{name}.pub" );
+
+	if ( defined $key->{body} ) {
+		return ( undef, "cannot write $path" )
+		    unless Fugu::File->write( $path, _key_text($key) );
+
+		return $path;
+	}
+
+	return ( undef, $ctx->{curl}->error )
+	    unless _fetch( $ctx, $key->{url}, $path );
+
+	my $got = _sha256($path);
+	unless ( defined $got ) {
+		my $why = "cannot read $path: $!";
+		unlink $path;
+		return ( undef, $why );
+	}
+	unless ( $got eq $key->{digest} ) {
+		unlink $path;
+		return ( undef,
+			      "the file holds $got, and the key line records"
+			    . " $key->{digest}" );
+	}
+
+	return $path;
+}
+
+# _check_digest($ctx, $path, $want, $key, $source):
+#	Hold one downloaded file to the wanted digest. The method
+#	returns 1 for a digest that matches, and 0 for every other
+#	answer, which it reports.
+#
+#	A mismatch names the repair of its tier (DEPS-TIER-10). The
+#	source is 'recorded' or 'signed', and the key names the line
+#	to repair: the URL for a recorded digest, and the file name
+#	for a signed manifest.
+sub _check_digest ( $ctx, $path, $want, $key, $source )
+{
+	my $log = $ctx->{app}->cli->log;
+
+	my $got = _sha256($path);
+	unless ( defined $got ) {
+		$log->error( 'cannot read %s: %s', $path, $! );
+		return 0;
+	}
+	return 1 if $got eq $want;
+
+	$log->error( '%s does not match its %s digest', $key, $source );
+	$log->error( '  expected %s', $want );
+	$log->error( '  got      %s', $got );
+	if ( $source eq 'signed' ) {
+		$log->error(  '  the signature verifies, so the served file'
+			    . ' disagrees with the release' );
+		$log->error(  '  report it upstream, and install nothing until'
+			    . ' it agrees' );
+	}
+	else {
+		$log->error(  '  compare the upstream checksum file, then'
+			    . q{ 'deps --update-sums --force' rewrites the line}
+		);
+	}
+
+	return 0;
+}
+
+# _sha256($path):
+#	The sha256 digest of one file, in lower-case hexadecimal, or
+#	undef for a file that does not open. The digest streams from
+#	the handle, so a large file never enters memory whole.
+sub _sha256 ($path)
+{
+	open my $fh, '<', $path or return;
+	binmode $fh;
+	my $sha = Digest::SHA->new(256);
+	$sha->addfile($fh);
+	close $fh;
+
+	return $sha->hexdigest;
+}
+
+# _fetch($ctx, $url, $path):
+#	Download one URL to one path through Fugu::Curl
+#	(DEPS-FETCH-1). The method returns 1 on success, and undef
+#	with the reason in the error of the downloader.
+#
+#	One Fugu::Curl serves the whole run, because it resolves the
+#	command of the host one time. A failed download leaves no file
+#	at the path.
+sub _fetch ( $ctx, $url, $path )
+{
+	$ctx->{curl} //= Fugu::Curl->new;
+
+	return $ctx->{curl}->fetch( $url, $path );
+}
+
+# _fetch_file($ctx, $url, $path):
+#	One download that the run needs. The method reports a failure
+#	and returns 0, and it returns 1 after a download that lands.
+sub _fetch_file ( $ctx, $url, $path )
+{
+	return 1 if _fetch( $ctx, $url, $path );
+	$ctx->{app}->cli->log->error( '%s', $ctx->{curl}->error );
+
+	return 0;
+}
+
+# _probe($ctx, $url, $path):
+#	One download whose absence is a normal answer: 1 for a file
+#	that lands, 0 for a 404, and undef for every other failure,
+#	which the method reports (DEPS-FETCH-3).
+#
+#	curl reports the HTTP status through --write-out, and a 404
+#	behind a redirect exits 56 and not 22. Fugu::Curl owns that
+#	classification, and the verb reads the status alone.
+sub _probe ( $ctx, $url, $path )
+{
+	return 1 if _fetch( $ctx, $url, $path );
+
+	my $curl = $ctx->{curl};
+	return 0
+	    if ( $curl->status // q{} ) eq 'http'
+	    && ( $curl->code // 0 ) == 404;
+
+	$ctx->{app}->cli->log->error( '%s', $curl->error );
+
+	return;
+}
+
+# _base($url):
+#	The directory part of one URL, or undef.
+sub _base ($url)
+{
+	my ($base) = $url =~ m{\A(.*)/[^/]+\z};
+
+	return defined $base && $base ne q{} ? $base : undef;
+}
+
+# _reasons($text):
+#	Each line of a multi-line reason, without its lead and its
+#	trailing whitespace. One line of the log carries one reason.
+sub _reasons ($text)
+{
+	my @out;
+	for my $line ( split /\n/, $text // q{} ) {
+		$line =~ s/\A\s+//;
+		$line =~ s/\s+\z//;
+		push @out, $line if length $line;
+	}
+
+	return @out;
 }
 
 # _cpanm($ctx):
@@ -617,7 +1141,8 @@ sub _asset ( $ctx, $url )
 #	library of the user, and PATH does not hold it.
 #
 #	The method resolves the command one time, because the trace
-#	holds the download of the script one time.
+#	holds the download of the script one time. It returns the
+#	empty list after a failed download, which it reports.
 sub _cpanm ($ctx)
 {
 	return @{ $ctx->{cpanm} } if $ctx->{cpanm};
@@ -630,6 +1155,13 @@ sub _cpanm ($ctx)
 		my $script = File::Spec->catfile( _tempdir($ctx), 'cpanm' );
 		_trace( $ctx, $ctx->{app}->cli->name,
 			'fetch', $script, CPANM_URL );
+
+		# This is the one download with no check, because no
+		# manifest names it (DEPS-INSTALL-4).
+		return
+		    unless $ctx->{dry}
+		    || _fetch_file( $ctx, CPANM_URL, $script );
+
 		@cmd = ( $^X, $script );
 	}
 	$ctx->{cpanm} = \@cmd;

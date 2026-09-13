@@ -1,0 +1,54 @@
+=head1 NAME
+
+App::FuguBench::Fetch - the fetch verb of fugubench
+
+=head1 SYNOPSIS
+
+    $ fugubench fetch /tmp/asset.tar.gz https://example.com/asset.tar.gz
+
+=head1 DESCRIPTION
+
+B<App::FuguBench::Fetch> holds the C<fetch> verb. The verb downloads
+one URL to one file through L<Fugu::Curl>, which runs curl, wget, or
+ftp. It is silent on success and returns 0.
+
+The argument order is the order of the F<ftp> helper of Tooling: the
+destination file first, and the URL after it. A make recipe that
+called the helper calls the verb, and the C<deps> verb names the verb
+in the trace of each download.
+
+The verb reads no checkout, so it runs in a tree with no
+F<.toolingrc>.
+
+=head2 command
+
+C<command($verb)> returns the entry of the L<Fugu::CLI> table. The
+module holds one verb, so it ignores the name.
+
+=head1 FAILURE
+
+L<Fugu::Curl> writes the bytes beside the destination, and it renames
+the file on success. A failed download therefore leaves no file at
+the destination, and the destination keeps what it held before the
+call.
+
+The verb writes the reason of a failure to standard error and returns
+1. An absent downloader is one such failure, and the reason names the
+three commands.
+
+=head1 RETURN VALUES
+
+C<command> returns a hash reference. Its body returns 0 after the
+download, and 1 after a failed one. A command line that holds other
+than two arguments is a usage error, and it returns 2.
+
+=head1 SEE ALSO
+
+L<App::FuguBench>, L<App::FuguBench::Deps>, L<Fugu::CLI>,
+L<Fugu::Curl>
+
+=head1 AUTHORS
+
+Dick Olsson E<lt>hi@senzilla.ioE<gt>
+
+=cut

@@ -256,7 +256,8 @@ sub _trace ($result)
 			'test dist https://example.com/Dist.tar.gz',
 			'test pkg package', q{} ),
 		'SHA256.txt' =>
-		    "SHA256 (https://example.com/tool_darwin_arm64.tar.gz)"
+		    "SHA256 (https://example.com/Dist.tar.gz) = $SUM\n"
+		    . "SHA256 (https://example.com/tool_darwin_arm64.tar.gz)"
 		    . " = $SUM\n",
 	);
 	my $r = _deps( $dir, '--dry-run', '--os', 'Darwin', '--arch', 'arm64',
@@ -438,16 +439,21 @@ sub _trace ($result)
 	is( $r->{stdout}, q{}, 'a bin entry without HOME writes no trace' );
 }
 
-# A run without --dry-run installs nothing, because the installers
-# are absent
+# A run without --dry-run names each command and runs none of them,
+# because the installers are absent. The case holds one pkg entry, so
+# the run asks no network.
 {
 	my $dir = _checkout( 'Darwin.txt' => "test pkg ok\n" );
 	my $r = _deps( $dir, '--os', 'Darwin', 'test' );
 	is( $r->{exit_code}, 1, 'a run without --dry-run exits 1' );
-	is( $r->{stdout},    q{}, 'a run without --dry-run writes no trace' );
+	is_deeply(
+		[ _trace($r) ],
+		['brew install ok'],
+		'a run without --dry-run names each command'
+	);
 	like(
-		$r->{stderr}, qr/the install is absent/,
-		'the message names the absent install'
+		$r->{stderr}, qr/the installers are absent/,
+		'the message names the absent installers'
 	);
 }
 
