@@ -32,10 +32,10 @@ comes from Workspace WS-WORKTREE and Workspace WS-BOOTSTRAP.
   made: the worktree directory, the branch, and each empty parent directory. A
   failed create leaves no worktree and no branch.
 - **WT-CREATE-7** — A second `create` of a name whose worktree exists must run
-  the bootstrap again, write the path again, and exit 0. Claude Code runs the
-  create hook again when a session reconnects, and that run must not fail. A
-  path that exists, but that is no worktree of that name, stays an error. The
-  message must name the remove command as the remedy.
+  the bootstrap again, write the path again, and exit 0. A caller can run the
+  same create twice, and the second run must not fail (HOOK-WORKTREE-3). A path
+  that exists, but that is no worktree of that name, stays an error. The message
+  must name the remove command as the remedy.
 
 <a id="wt-remove"></a>
 

@@ -151,6 +151,10 @@ starts a comment.
 - **CLI-SANDBOX-3** — A verb that opens no file must pledge `stdio` and must
   unveil nothing. `stdio` denies open(2), so an unveil under it opens no file
   and hides no file. `version` is that verb.
+- **CLI-SANDBOX-4** — A row can give one promise set to a named subcommand. The
+  verb must pledge that set for that subcommand. It must pledge the promises of
+  the row for every other subcommand. The `list` subcommand of `worktree` writes
+  no file, so its set drops the write promises.
 
 <a id="cli-doctor"></a>
 
@@ -174,10 +178,11 @@ starts a comment.
 The program replaces four scripts that have tests, and the tests come with it.
 
 - **CLI-CONFORMANCE-1** — The test suite must hold the black-box tests of the
-  Workspace scripts `worktree.pl`, `wiki.pl`, and `traces.pl`. Each ported test
-  must change the invocation and the fixture, and nothing else. An assertion on
-  a file of the Workspace stays in the Workspace test. A behavior that a test
-  asserts must hold in the program.
+  Workspace scripts `worktree.pl`, `wiki.pl`, and `traces.pl`. A ported test
+  must keep each assertion of the source. It must change the invocation, the
+  fixture, the pragma block of the source floor, and the unit citations. It must
+  change nothing else. An assertion on a file of the Workspace stays in the
+  Workspace test. A behavior that a test asserts must hold in the program.
 - **CLI-CONFORMANCE-2** — The dry-run trace of `deps` over the manifests of
   every consumer must equal the trace of the synced `scripts/deps`, line for
   line. The rule holds until Tooling retires the script. The fixtures are copies

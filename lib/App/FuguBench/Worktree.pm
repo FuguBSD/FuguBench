@@ -49,8 +49,8 @@ use Fugu::Process;
 # one cleanup.
 #
 # A second create of a name whose worktree exists runs the bootstrap
-# again and writes the path again. Claude Code runs the create hook
-# again when a session reconnects, and that run must not fail.
+# again and writes the path again. A second create must not fail,
+# and HOOK-WORKTREE-3 gives the reason.
 #
 # Only an operator runs remove, and no hook calls it (D-06). A
 # session captures its work in the clones inside its worktree, so
@@ -272,10 +272,9 @@ sub _create ( $app, @argv )
 
 # _again($app, $root, $name, $wt):
 #	The result of a second create of one name (WT-CREATE-7). A
-#	session that reconnects runs the create hook again with the
-#	same name, and that run must not fail. So the method runs the
-#	bootstrap again and writes the path again. Each clone step of
-#	the bootstrap skips what exists, so the run repairs a bootstrap
+#	second create must not fail, so the method runs the bootstrap
+#	again and writes the path again. Each clone step of the
+#	bootstrap skips what exists, so the run repairs a bootstrap
 #	that stopped early.
 #
 #	A path that is no worktree of the name is debris from a killed

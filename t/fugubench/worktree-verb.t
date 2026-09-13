@@ -216,9 +216,8 @@ subtest 'create refuses a name of the wrong shape' => sub {
 
 subtest 'a second create repairs the bootstrap and reports the path' => sub {
 
-	# Claude Code runs the create hook again when a session
-	# reconnects, with the same name. That run must write the path
-	# and exit 0, or the session fails (WT-CREATE-7).
+	# A caller can run the same create twice. The second run must
+	# write the path and exit 0 (WT-CREATE-7).
 	my ( $dir, $real ) = _repo('@echo run >> bootstrap.log');
 	my $wt = "$real/.claude/worktrees/again";
 
