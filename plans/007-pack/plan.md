@@ -3,9 +3,10 @@
 ## Status
 
 Work package 1 landed the packer, the `make dist` hook, and
-`t/fugubench/pack.t`. Package 2 and package 3 wait on no other plan of this
-repository. The packer packs the modules that exist, and the module list test
-grows with each verb plan.
+`t/fugubench/pack.t`. Work package 2 landed the `shim` verb, the `install` verb,
+their two sandbox rows, and the verb part of `t/fugubench/dist.t`. Package 3
+waits on no other plan of this repository. The packer packs the modules that
+exist, and the module list test grows with each verb plan.
 
 Fugu v0.5.0 carries the v5.34 floor, so the packed file runs on perl 5.34. The
 test runs the pruned `@INC` case on the perl of the suite, and on a perl 5.34 of
@@ -15,12 +16,8 @@ of the latest release and runs it. Tooling ships the shim in the org pack
 (D-09). The release workflow publishes `fugubench` and `install.sh` under
 DIST-ASSETS, in the plan of that unit.
 
-Implements: DIST-SHIM. Implements: DIST-INSTALL without DIST-INSTALL-3.
-Implements: DIST-KEY without DIST-KEY-2.
-
-Implements: CLI-VERBS. This plan adds the `shim` verb and the `install` verb.
-
-Implements: CLI-SANDBOX. This plan adds the rows of the two verbs.
+Implements: DIST-INSTALL without DIST-INSTALL-2 and DIST-INSTALL-3. Implements:
+DIST-KEY without DIST-KEY-2.
 
 ## Purpose
 

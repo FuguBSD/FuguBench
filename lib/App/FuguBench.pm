@@ -33,6 +33,7 @@ use Fugu::Sandbox;
 
 use App::FuguBench::Checkout;
 use App::FuguBench::Deps;
+use App::FuguBench::Dist;
 use App::FuguBench::Fetch;
 use App::FuguBench::Traces;
 use App::FuguBench::Version;
@@ -63,6 +64,8 @@ my @VERBS = (
 	[ 'worktree', 'App::FuguBench::Worktree' ],
 	[ 'deps',     'App::FuguBench::Deps' ],
 	[ 'fetch',    'App::FuguBench::Fetch' ],
+	[ 'shim',     'App::FuguBench::Dist' ],
+	[ 'install',  'App::FuguBench::Dist' ],
 );
 
 # The sandbox row of each verb (CLI-SANDBOX). A row names the pledge
@@ -82,8 +85,13 @@ my @VERBS = (
 #
 # `traces` opens its files itself and runs no child, so its row
 # unveils. The list comes from the verb, because a path of it comes
-# from an option and a path of it comes from the checkout. The two
-# other verbs that unveil are `shim` and `install` (CLI-SANDBOX-2).
+# from an option and a path of it comes from the checkout.
+#
+# `shim` and `install` open a file of their own and run no child, so
+# each row unveils as well. They are the two other verbs that unveil
+# (CLI-SANDBOX-2). `shim` reads the running file, and `install`
+# reads it and writes the copy, so each list comes from the verb
+# too.
 #
 # The install of `deps` runs a package manager, cpanm, and the
 # commands of an archive, and each one writes outside every path of a
@@ -111,6 +119,18 @@ my %SANDBOX = (
 	},
 	deps  => { promises => 'stdio rpath wpath cpath proc exec inet dns' },
 	fetch => { promises => 'stdio rpath wpath cpath proc exec inet dns' },
+	shim  => {
+		promises => 'stdio rpath',
+		unveil   => sub ($app) {
+			return App::FuguBench::Dist->shim_paths($app);
+		},
+	},
+	install => {
+		promises => 'stdio rpath wpath cpath fattr',
+		unveil   => sub ($app) {
+			return App::FuguBench::Dist->install_paths($app);
+		},
+	},
 );
 
 # The global options, in the form of Fugu::CLI. new gives the table
