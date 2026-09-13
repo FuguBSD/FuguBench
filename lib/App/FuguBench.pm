@@ -320,8 +320,9 @@ sub _group ( $self, $cmd, %args )
 	$self->{child} = $result->{pid};
 	my $reaped = waitpid $result->{pid}, 0;
 
-	# The errno of the wait, next to the wait itself: each read
-	# below sets its own.
+	# The errno of the wait, next to the wait itself. A read below
+	# that fails overwrites $!, and the message of a wait that
+	# reaps no child must name the errno of the wait.
 	my $errno = $!;
 	my $code  = Fugu::Process->exit_code($?);
 	$self->{child} = undef;
