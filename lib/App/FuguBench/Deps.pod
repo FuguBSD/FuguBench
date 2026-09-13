@@ -10,8 +10,9 @@ App::FuguBench::Deps - the deps verb of fugubench
 =head1 DESCRIPTION
 
 B<App::FuguBench::Deps> holds the C<deps> verb. The verb reads the
-external dependencies that F<< deps/<OS>.txt >> names, and it prints
-the command of each one. The environments are C<tool>, C<runtime>,
+external dependencies that F<< deps/<OS>.txt >> names, and it
+installs each one. C<--dry-run> prints the command of each install,
+and it runs none of them. The environments are C<tool>, C<runtime>,
 C<test>, and C<develop>, and the verb takes one of them as its
 argument. C<--update-sums> records the digest of each download of the
 manifest, and it takes no environment word.
@@ -169,8 +170,11 @@ digest, and a key that no server answers, leave the trust order with
 a warning. The verb tries the next key, and it reports each failure
 when no key verifies.
 
-An empty key set is valid. The signify tier then stops with an error
-that names it.
+An empty key set is valid. The signify tier of an install then stops
+with an error that names it. The signed-manifest probe of
+C<--update-sums> reports the same fact as a warning, and the refresh
+goes on. A manifest that no key verifies keeps the entry off the
+digest tier.
 
 =head2 THE DOWNLOADS
 

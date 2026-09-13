@@ -39,7 +39,8 @@ use Fugu::Signify;
 #
 # The verb reads the external tools, the Perl distributions, the CPAN
 # modules, and the prebuilt binaries that deps/<OS>.txt names, and it
-# prints the command of each one. The design comes from the synced
+# installs each one. --dry-run prints the command of each install,
+# and it runs none of them. The design comes from the synced
 # scripts/deps, and the trace of --dry-run is the oracle of
 # CLI-CONFORMANCE-2.
 #

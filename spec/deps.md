@@ -182,8 +182,11 @@ release directory with unique file names, so it keys on the file name.
   underscore only, and it must appear one time. A key body must decode, and a
   digest must be 64 hexadecimal characters. Each other shape is an error that
   names the line.
-- **DEPS-KEYS-5** — An empty key set is valid. The signify tier must then stop
-  with an error that names the empty set.
+- **DEPS-KEYS-5** — An empty key set is valid. The signify tier of an install
+  must then stop with an error that names the empty set. The signed-manifest
+  probe of `deps --update-sums` must report the same fact as a warning, and the
+  refresh must go on. A manifest that no key verifies keeps the entry off the
+  digest tier (DEPS-SUMS-6).
 - **DEPS-KEYS-6** — A key of the URL form must download into a temporary
   directory on each use. The verb must hold it to the recorded digest. A cached
   copy would carry the check of an earlier entry.
