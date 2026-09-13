@@ -47,7 +47,8 @@ under the home of the operator. A trace root that is no directory is a
 failure, and the message holds the path.
 
 C<--name E<lt>nameE<gt>> replaces the derived name. The verb then
-derives nothing, and it reads no checkout.
+derives no name. It still reads the checkout, because the edits column
+takes its boundary from the checkout path.
 
 =head2 THE OUTPUT
 
@@ -57,19 +58,89 @@ reached the model, so it gets no line. A name that matches no
 directory gives one line, C<no session of E<lt>nameE<gt>>, and the
 verb returns 0.
 
-The columns are C<session>, the first eight characters of the session
-identifier, C<start>, the time of the first record of the session in
-UTC, and C<reqs>, the requests of the session.
+The columns are:
 
-One request writes one record for each content block, so the count
-takes each request one time. A record with no request identifier
-counts alone.
+=over 4
+
+=item C<session>
+
+The first eight characters of the session identifier.
+
+=item C<start>
+
+The time of the first record of the session, in UTC.
+
+=item C<reqs>
+
+The requests of the main session.
+
+=item C<peak>
+
+The largest context of one request: the fresh input tokens, the cache
+writes and the cache reads.
+
+=item C<out>
+
+The output tokens of the main session, thinking included.
+
+=item C<panel>
+
+The requests that hold a panel launch.
+
+=item C<edits>
+
+The file edits of the main session after the first panel launch.
+
+=item C<sub-in>
+
+The input tokens of every sub-agent of the session.
+
+=item C<sub-out>
+
+The output tokens of every sub-agent.
+
+=item C<rev-peak>
+
+The largest peak context of one panel reviewer.
+
+=back
+
+=head2 THE COUNTS
+
+One request writes one record for each content block, and each record
+carries the usage of the whole request. An early record can carry a
+partial count, so the verb takes the usage of the last record of a
+request. A record with no request identifier counts alone.
 
 The reader decodes each record until one carries a start time, and
 after that it decodes an assistant record only. A full parse of every
 record costs minutes over a long history. Every usage block and every
 C<tool_use> block sits in an assistant record, so the filter loses no
 count. A line that fails to decode is no record.
+
+A panel launch is a C<tool_use> block of the C<Agent> or C<Task> tool
+whose C<subagent_type> is C<reviewer>. A catch-all type,
+C<general-purpose> or C<claude>, and an absent type name no role, so
+the description decides: it holds the word C<panel>. Another type,
+such as a fixer, is no launch.
+
+The edits column takes the C<Edit>, C<Write>, C<MultiEdit> and
+C<NotebookEdit> blocks that come after the first panel launch. A block
+counts when its target is a repository file. An absolute target must
+sit inside the checkout path, on a directory boundary, so a write to
+the home of the operator or to a sibling checkout counts for nothing.
+A relative target sits inside the checkout, because the path resolves
+against the working directory of the session. A target under
+F<scratch/>, or a F<SCRATCHPAD*.md> file, is no repository file. A
+block with no target counts.
+
+The sub-agent traces sit under F<E<lt>sessionE<gt>/subagents/>, and
+under each workflow directory below it. The C<sub-in> and C<sub-out>
+columns hold every one of them together, so neither column measures
+one reviewer. Each sub-agent trace has a sibling F<.meta.json> that
+carries the identifier of its launch. The C<rev-peak> column maps the
+panel launches to their traces through it, and it reports the largest
+peak of them.
 
 =head2 command
 
@@ -92,8 +163,9 @@ verb reports an absent trace root itself. A required entry would die
 in front of that report.
 
 The method resolves the checkout, because C<unveil(2)> hides the
-directories above the root and the walk must run first. With
-C<--name> the verb reads no checkout, and the list then holds no root.
+directories above the root and the walk must run first. Every run
+reads the checkout, C<--name> included, because the edits column takes
+its boundary from the checkout path.
 
 =head1 RETURN VALUES
 

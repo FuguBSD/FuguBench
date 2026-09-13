@@ -130,6 +130,25 @@ subtest 'the row of traces unveils its paths' => sub {
 	is( $optional{$dir},   0, 'the checkout root is a required entry' );
 };
 
+subtest 'the row of traces names the checkout under --name' => sub {
+	my $dir   = _checkout();
+	my $trace = "$dir/traces";
+	make_path($trace);
+
+	# The option --name replaces the derived name, and it leaves
+	# the edit boundary alone. That boundary comes from the
+	# checkout, so the row names the checkout root in each run
+	# (TRACE-PANEL-3).
+	my ( $code, $promises, $paths ) = _entered( '-C', $dir, 'traces',
+		'--root', $trace, '--name', 'fixture' );
+	is( $code, 0, 'traces exits zero' );
+	is_deeply( $promises, ['stdio rpath'], 'the row pledges stdio rpath' );
+
+	my @want = sort ( Fugu::Sandbox->perl_lib_dirs, $dir, $trace );
+	my @got  = sort map { $_->[0] } @$paths;
+	is_deeply( \@got, \@want, 'the row unveils the checkout root too' );
+};
+
 subtest 'a row with no list unveils nothing' => sub {
 	my ( $code, $promises, $paths ) = _entered('version');
 	is( $code, 0, 'version exits zero' );
