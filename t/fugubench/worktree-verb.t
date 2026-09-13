@@ -74,7 +74,9 @@ sub _repo ( $recipe = undef, $parent = undef )
 	_git( '-C', $dir, 'config', 'commit.gpgsign', 'false' );
 
 	_write( "$dir/.toolingrc",  q{} );
-	_write( "$dir/.gitignore",  ".claude/worktrees/\n" );
+	# The checkout ignores each worktree base that a case
+	# configures, as a checkout of the operator does.
+	_write( "$dir/.gitignore",  ".claude/worktrees/\ntrees/\n" );
 	_write( "$dir/f.txt",       "x\n" );
 	_write( "$dir/GNUmakefile", "bootstrap:\n\t$recipe\n" )
 	    if defined $recipe;
@@ -738,6 +740,51 @@ subtest 'the base of the worktrees resolves against the root' => sub {
 		qr/^one\s+\d+ d\s+clean$/m,
 		'list reads the configured base'
 	);
+};
+
+subtest 'the nested worktree directory follows the configured base' => sub {
+
+	# The skip of WT-REMOVE-3 and WT-CLONE-3 names the
+	# worktree.base directory, and a checkout can configure
+	# another one.
+	my $home = tempdir( CLEANUP => 1 );
+	_write( "$home/.toolingrc", "worktree.base trees\n" );
+	my ( $dir, $real ) = _repo( undef, "$home/Projects" );
+
+	my $result = _run( $dir, 'create', 'outer' );
+	is( $result->{exit_code}, 0, 'create makes the worktree' )
+	    or diag $result->{stderr};
+
+	# A worktree of the worktree sits under the configured base.
+	# The risk walk must skip it, so no state of it stops the
+	# removal of the outer worktree.
+	my $inner = "$real/trees/outer/trees/inner";
+	make_path($inner);
+	_git( 'init', '--quiet', '-b', 'main', $inner );
+	_write( "$inner/f.txt", "work\n" );
+
+	$result = _run( $dir, 'remove', 'outer' );
+	is( $result->{exit_code}, 0,
+		'the risk walk skips the configured base (WT-REMOVE-3)' )
+	    or diag $result->{stderr};
+	ok( !-e "$real/trees/outer", 'the worktree is gone' );
+
+	# The .env walk of clone skips the same directory
+	# (WT-CLONE-3).
+	my $dest = tempdir( CLEANUP => 1 );
+	_source( "$real/Projects/one", 'https://example.com/one.git' );
+	make_path("$real/Projects/one/trees/inner");
+	make_path("$real/Projects/one/deep");
+	_write( "$real/Projects/one/trees/inner/.env", "KEY=nested\n" );
+	_write( "$real/Projects/one/deep/.env",        "KEY=value\n" );
+
+	$result = _clone( $dir, $dest, 'Projects' );
+	is( $result->{exit_code}, 0, 'clone exits 0' )
+	    or diag $result->{stderr};
+	ok( -f "$dest/Projects/one/deep/.env",
+		'the .env file outside the base arrives (WT-CLONE-3)' );
+	ok( !-e "$dest/Projects/one/trees/inner/.env",
+		'the .env walk skips the configured base (WT-CLONE-3)' );
 };
 
 subtest 'a linked worktree is no main checkout' => sub {

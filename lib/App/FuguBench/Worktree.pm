@@ -145,9 +145,7 @@ sub _root ($app)
 
 # _setup($app):
 #	The exit code, the main checkout, and the worktree base, in
-#	that order. Create, remove, and list read the base, and clone
-#	does not, so clone calls _root alone and gives no
-#	configuration error of the base.
+#	that order. Create, remove, list, and clone all read the base.
 #
 #	The base is the worktree.base key, and it resolves against the
 #	root (CLI-CONFIG-2). A clone under Projects/ can inherit the
@@ -166,6 +164,18 @@ sub _setup ($app)
 	}
 
 	return ( EXIT_SUCCESS, $root, File::Spec->catdir( $root, $dir ) );
+}
+
+# _nested($root, $base):
+#	The pattern of a nested worktree directory (WT-REMOVE-3,
+#	WT-CLONE-3). The directory is the worktree.base value, a
+#	relative path under a checkout root. So the pattern matches it
+#	as a whole segment at the end of a path.
+sub _nested ( $root, $base )
+{
+	my $dir = substr $base, length($root) + 1;
+
+	return qr{(?:\A|/)\Q$dir\E\z};
 }
 
 # _known($dir):
@@ -412,7 +422,7 @@ sub _remove ( $app, @argv )
 	# no state of it. A clone below it is a repository of its own,
 	# and the walk reads that one.
 	unless ( $app->cli->option('force') ) {
-		my @risk = _risks( $app, $resolved );
+		my @risk = _risks( $app, $resolved, _nested( $root, $base ) );
 		if (@risk) {
 			$log->error( '%s', $_ ) for @risk;
 			$log->error(
@@ -502,13 +512,14 @@ sub _list ( $app, @argv )
 		return EXIT_SUCCESS;
 	}
 
+	my $nested = _nested( $root, $base );
 	for my $path ( sort @paths ) {
 
 		# The gitfile records the creation, and later work
 		# leaves it alone, so its mtime is the age.
 		my @stat  = stat "$path/.git";
 		my $age   = @stat ? int( ( time - $stat[9] ) / 86_400 ) : -1;
-		my @risk  = _risks( $app, $path );
+		my @risk  = _risks( $app, $path, $nested );
 		my $state = @risk ? join( '; ', @risk ) : 'clean';
 		say sprintf LINE, substr( $path, length($base) + 1 ),
 		    $age < 0 ? '?' : $age, $state;
@@ -517,14 +528,14 @@ sub _list ( $app, @argv )
 	return EXIT_SUCCESS;
 }
 
-# _risks($app, $wt):
+# _risks($app, $wt, $nested):
 #	Each reason why one worktree holds work at risk
 #	(WT-REMOVE-2). An empty list names a worktree that is safe to
 #	remove. Each string names one repository and one cause.
-sub _risks ( $app, $wt )
+sub _risks ( $app, $wt, $nested )
 {
 	my @risk;
-	for my $repo ( _repos_in($wt) ) {
+	for my $repo ( _repos_in( $wt, $nested ) ) {
 		my $rel = $repo eq $wt ? '.' : substr( $repo, length($wt) + 1 );
 
 		my $dirty = _capture( $app, 'git', '-C', $repo, 'status',
@@ -559,7 +570,7 @@ sub _risks ( $app, $wt )
 	return @risk;
 }
 
-# _repos_in($wt):
+# _repos_in($wt, $nested):
 #	Each git repository in one worktree: the worktree itself, and
 #	each repository below it, such as a clone under Projects/ or
 #	the library at Wiki/ (WT-REMOVE-3). The walk stops at each
@@ -571,7 +582,7 @@ sub _risks ( $app, $wt )
 #	holds it only when git knows it. A clone that a partial
 #	bootstrap left inside it is a repository, and the walk finds
 #	that one.
-sub _repos_in ($wt)
+sub _repos_in ( $wt, $nested )
 {
 	my @repos = _known($wt) ? ($wt) : ();
 	File::Find::find( {
@@ -586,8 +597,7 @@ sub _repos_in ($wt)
 				my $name = $File::Find::name;
 				return if $name eq $wt;
 				return unless -d $name && !-l $name;
-				if ( $name =~ m{(?:\A|/)[.]claude/worktrees\z} )
-				{
+				if ( $name =~ $nested ) {
 					$File::Find::prune = 1;
 					return;
 				}
@@ -617,7 +627,7 @@ sub _clone ( $app, @argv )
 {
 	return $app->cli->command_usage_error('worktree') unless @argv;
 
-	my ( $code, $root ) = _root($app);
+	my ( $code, $root, $base ) = _setup($app);
 	return $code if $code != EXIT_SUCCESS;
 
 	my $log = $app->cli->log;
@@ -637,8 +647,10 @@ sub _clone ( $app, @argv )
 		return EXIT_SUCCESS;
 	}
 
+	my $nested = _nested( $root, $base );
 	for my $path (@paths) {
-		return EXIT_ERROR unless _clone_path( $app, $root, $path );
+		return EXIT_ERROR
+		    unless _clone_path( $app, $root, $path, $nested );
 	}
 
 	return EXIT_SUCCESS;
@@ -653,18 +665,19 @@ sub _valid_path ($path)
 	return $path =~ $PATH && $path !~ m{[.][.]} && $path ne q{.};
 }
 
-# _clone_path($app, $root, $path):
+# _clone_path($app, $root, $path, $nested):
 #	Take one path of clone (WT-CLONE-2). A repository gives a
 #	local clone, a directory gives one clone of each child, and a
 #	plain file gives a copy. An absent path gives a message and no
 #	failure, because a consumer names a path that its own tree can
 #	omit (WT-CLONE-5). The method returns 0 after a failure.
-sub _clone_path ( $app, $root, $path )
+sub _clone_path ( $app, $root, $path, $nested )
 {
 	my $log = $app->cli->log;
 	my $src = File::Spec->catdir( $root, $path );
 
-	return _clone_repo( $app, $src, $path ) if -d $src && -e "$src/.git";
+	return _clone_repo( $app, $src, $path, $nested )
+	    if -d $src && -e "$src/.git";
 
 	if ( -d $src ) {
 		opendir my $dh, $src or do {
@@ -678,7 +691,7 @@ sub _clone_path ( $app, $root, $path )
 		for my $name (@names) {
 			return 0
 			    unless _clone_repo( $app, "$src/$name",
-				"$path/$name" );
+				"$path/$name", $nested );
 		}
 
 		return 1;
@@ -696,14 +709,14 @@ sub _clone_path ( $app, $root, $path )
 	return 0;
 }
 
-# _clone_repo($app, $src, $dst):
+# _clone_repo($app, $src, $dst, $nested):
 #	Make one local clone of a repository of the main checkout, and
 #	set its origin to the origin URL of the source (WT-CLONE-2). A
 #	destination that exists stays as it is (WT-CLONE-4).
 #
 #	A project that no clone reaches gives an incomplete worktree,
 #	and no message names it later. So a failure stops the run.
-sub _clone_repo ( $app, $src, $dst )
+sub _clone_repo ( $app, $src, $dst, $nested )
 {
 	my $log = $app->cli->log;
 	if ( -e $dst ) {
@@ -752,16 +765,16 @@ sub _clone_repo ( $app, $src, $dst )
 		}
 	}
 
-	return _copy_env_tree( $app, $src, $dst );
+	return _copy_env_tree( $app, $src, $dst, $nested );
 }
 
-# _copy_env_tree($app, $src, $dst):
+# _copy_env_tree($app, $src, $dst, $nested):
 #	Copy each regular .env file of one source tree, at any depth,
 #	into the clone (WT-CLONE-3). The files are gitignored, so the
 #	clone above holds none of them. The walk skips .git and a
 #	nested worktree directory, and it copies no symbolic link: a
 #	.env link is content of the repository, and it stays there.
-sub _copy_env_tree ( $app, $src, $dst )
+sub _copy_env_tree ( $app, $src, $dst, $nested )
 {
 	my $ok = 1;
 	File::Find::find( {
@@ -770,7 +783,7 @@ sub _copy_env_tree ( $app, $src, $dst )
 				my $name = $File::Find::name;
 				my $base = basename($name);
 				my $skip = $base eq '.git'
-				    || $name =~ m{/[.]claude/worktrees\z};
+				    || ( $name ne $src && $name =~ $nested );
 				if ($skip) {
 					$File::Find::prune = 1;
 					return;
