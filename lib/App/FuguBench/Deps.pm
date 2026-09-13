@@ -648,6 +648,9 @@ sub _keys ( $app, $dir )
 #	give the body form, and three give the URL form, whose digest
 #	is the trust anchor.
 #
+#	The URL of the URL form reaches the downloader, so it takes
+#	the shape check of the fetch verb (DEPS-FETCH-4).
+#
 #	The method reports a bad line and returns undef (DEPS-KEYS-4).
 sub _key ( $app, $field, $where )
 {
@@ -678,16 +681,21 @@ sub _key ( $app, $field, $where )
 	}
 
 	if ( @$field == 3 ) {
+		unless ( $field->[2] =~ /\A[0-9a-f]{64}\z/ ) {
+			$log->error( '%s: not a sha256 digest: %s',
+				$where, $field->[2] );
+			return;
+		}
+
+		return
+		    unless App::FuguBench::Fetch::check_url( $app, $field->[1],
+			$where );
+
 		return {
 			name   => $field->[0],
 			url    => $field->[1],
 			digest => $field->[2],
-		    }
-		    if $field->[2] =~ /\A[0-9a-f]{64}\z/;
-
-		$log->error( '%s: not a sha256 digest: %s',
-			$where, $field->[2] );
-		return;
+		};
 	}
 
 	$log->error( '%s: a key line holds two or three fields', $where );

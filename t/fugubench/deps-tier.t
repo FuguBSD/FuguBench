@@ -529,7 +529,8 @@ sub _bin_opt ( $url, $opt, %file )
 }
 
 # A key that the file name names, a blank line, and each bad key line
-# are configuration errors (DEPS-TIER-5, DEPS-TIER-4, DEPS-KEYS-4)
+# are configuration errors (DEPS-TIER-5, DEPS-TIER-4, DEPS-KEYS-4,
+# DEPS-FETCH-4)
 {
 	my $url = 'https://example.com/tool-1.0.0';
 	my %bad = (
@@ -557,6 +558,17 @@ sub _bin_opt ( $url, $opt, %file )
 		'a key line of four fields' => [
 			{ 'KEYS.txt' => "fugubench-test a b c\n" },
 			qr/two or three fields/
+		],
+
+		# The key file downloads through the downloader of every
+		# other file, which takes no '--' separator.
+		'a key URL that starts with a dash' => [
+			{ 'KEYS.txt' => "fugubench-test -K/tmp/evilrc $WRONG\n" },
+			qr/the URL must start with a scheme/
+		],
+		'a key URL with no scheme' => [
+			{ 'KEYS.txt' => "fugubench-test keys/test.pub $WRONG\n" },
+			qr/the URL must start with a scheme/
 		],
 		'a duplicate key name' => [
 			{

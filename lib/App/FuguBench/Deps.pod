@@ -156,8 +156,9 @@ A key line holds a name and then one of two forms. Two fields give
 the key body, which is the second line of a signify public key file.
 Three fields give the URL of a key file and its sha256 digest, and
 the digest is the trust anchor. A key name holds letters, digits, a
-dot, a dash, and an underscore, and it appears one time. Each other
-shape is an error that names the line.
+dot, a dash, and an underscore, and it appears one time. A key URL
+reaches the same downloader, so it takes the same shape check. Each
+other shape is an error that names the line.
 
 The line order is the trust order, and the current key comes first.
 Every declared key verifies every signify-tier download, so no key

@@ -180,8 +180,9 @@ release directory with unique file names, so it keys on the file name.
   binds to one entry.
 - **DEPS-KEYS-4** — A key name must hold letters, digits, a dot, a dash, and an
   underscore only, and it must appear one time. A key body must decode, and a
-  digest must be 64 hexadecimal characters. Each other shape is an error that
-  names the line.
+  digest must be 64 hexadecimal characters. A key URL must take the shape check
+  of DEPS-FETCH-4, because it reaches the downloader. Each other shape is an
+  error that names the line.
 - **DEPS-KEYS-5** — An empty key set is valid. The signify tier of an install
   must then stop with an error that names the empty set. The signed-manifest
   probe of `deps --update-sums` must report the same fact as a warning, and the
