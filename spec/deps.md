@@ -37,7 +37,9 @@ runs in-process through Fugu LIB-SIGNIFY with the engine of Fugu LIB-ED25519.
   of CLI-CONFORMANCE-2.
 - **DEPS-MANIFEST-7** — A `pkg` name and a `cpan` name must not start with a
   dash, and neither may be a URL. Both reach a package manager, which owns its
-  own check.
+  own check. A `dist` URL and a `bin` URL must start with a scheme, because the
+  downloader reads the URL as one argument. A name that starts with a dash would
+  reach the downloader as an option.
 - **DEPS-MANIFEST-8** — A `dist` name is one URL. A `bin` name holds the command
   name, the URL, and, for an archive, the path of the file in the archive. An
   archive URL ends in `.tar.gz`, `.tgz`, or `.zip`, and it needs the path. A

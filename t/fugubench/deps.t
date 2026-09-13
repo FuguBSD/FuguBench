@@ -181,6 +181,12 @@ sub _trace ($result)
 		],
 		'a URL that names no file' =>
 		    [ 'runtime dist https://example.com/', qr/names no file/ ],
+		'a dist URL with a leading dash' =>
+		    [ 'runtime dist -rf', qr/must start with a scheme/ ],
+		'a bin URL with no scheme' => [
+			'tool bin g example.com/x',
+			qr/must start with a scheme/
+		],
 		'a command name with a slash' => [
 			'tool bin ../evil https://example.com/x',
 			qr/the command name '\.\.\/evil'/
