@@ -219,6 +219,21 @@ subtest 'an argument is a usage error' => sub {
 		qr/^usage: fugubench traces /m,
 		'the usage goes to standard error'
 	);
+
+	# The sandbox row reads the checkout in front of the verb, and
+	# the walk fails under a start with no .toolingrc. The report
+	# of that walk waits for the verb, so no configuration error
+	# joins the usage (CLI-CHECKOUT-3).
+	my $bare = tempdir( CLEANUP => 1 );
+	my $b    = _run( $root, '-C', $bare, 'traces', 'extra' );
+	is( $b->{exit_code}, 2, 'a start under no .toolingrc exits 2 too' );
+	like(
+		$b->{stderr},
+		qr/^usage: fugubench traces /m,
+		'and the usage goes to standard error'
+	);
+	unlike( $b->{stderr}, qr/toolingrc/,
+		'and no configuration error joins it' );
 };
 
 subtest 'a start under no .toolingrc reports one time' => sub {

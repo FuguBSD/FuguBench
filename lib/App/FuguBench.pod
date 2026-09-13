@@ -68,8 +68,10 @@ start, and it names the start directory in the log. The verb then
 returns the configuration code.
 
 The walk runs one time, and a failed walk stays failed. A sandbox row
-reads the checkout before the verb does, so a second walk would report
-the same absent file twice.
+reads the checkout before the verb does, and that row reports nothing.
+So the report waits for the call of the verb, and it comes one time. A
+verb that rejects its argument list reports the usage, and no
+configuration error.
 
 C<checkout($checkout)> sets the checkout, for a verb that reads its
 start from a payload.

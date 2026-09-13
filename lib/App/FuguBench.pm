@@ -113,6 +113,8 @@ sub new ($class)
 		cli      => undef,
 		checkout => undef,
 		walked   => 0,
+		missing  => undef,
+		quiet    => 0,
 		child    => undef,
 		error    => undef,
 	}, $class;
@@ -164,6 +166,12 @@ sub _commands ($self)
 #
 #	The row resolves here, after the option parse and before the
 #	verb, so a path of a row can come from an option.
+#
+#	A row that names the checkout root walks to it here, because
+#	the unveil hides the directories above that root. The walk
+#	reports nothing, and the verb reports a failed walk on its own
+#	call. A verb that rejects its argument list then reports the
+#	usage, and no configuration error (CLI-CHECKOUT-3).
 sub _sandbox ( $self, $verb, $subcommand = undef )
 {
 	my $row      = $SANDBOX{$verb};
@@ -172,8 +180,11 @@ sub _sandbox ( $self, $verb, $subcommand = undef )
 	$promises = $named->{$subcommand}
 	    if defined $subcommand && defined $named->{$subcommand};
 
-	Fugu::Sandbox->unveil( paths => [ $row->{unveil}->($self) ] )
-	    if $row->{unveil};
+	if ( $row->{unveil} ) {
+		$self->{quiet} = 1;
+		Fugu::Sandbox->unveil( paths => [ $row->{unveil}->($self) ] );
+		$self->{quiet} = 0;
+	}
 
 	Fugu::Sandbox->pledge( promises => $promises );
 
@@ -250,8 +261,9 @@ sub child ($self)
 #	then returns EXIT_CONFIG_ERROR.
 #
 #	The walk runs one time, and a failed walk stays failed. A
-#	sandbox row reads the checkout before the verb does, so a
-#	second walk would report the same absent file twice.
+#	sandbox row reads the checkout before the verb does, and that
+#	row reports nothing. So the report waits for the call of the
+#	verb, and it comes one time.
 #
 #	With an argument the method sets the checkout, for a verb that
 #	reads its start from a payload.
@@ -262,13 +274,21 @@ sub checkout ( $self, $checkout = undef )
 		$self->{walked}   = 1;
 		return $checkout;
 	}
-	return $self->{checkout} if $self->{walked};
-	$self->{walked} = 1;
 
-	my $start = $self->{cli}->option('C') // Cwd::getcwd();
-	$self->{checkout} = App::FuguBench::Checkout->new( start => $start );
-	$self->{cli}->log->error( 'no .toolingrc above %s', $start )
-	    unless defined $self->{checkout};
+	unless ( $self->{walked} ) {
+		$self->{walked} = 1;
+
+		my $start = $self->{cli}->option('C') // Cwd::getcwd();
+		$self->{checkout} =
+		    App::FuguBench::Checkout->new( start => $start );
+		$self->{missing} = $start
+		    unless defined $self->{checkout};
+	}
+
+	if ( defined $self->{missing} && !$self->{quiet} ) {
+		$self->{cli}->log->error( 'no .toolingrc above %s',
+			delete $self->{missing} );
+	}
 
 	return $self->{checkout};
 }
