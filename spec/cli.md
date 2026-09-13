@@ -78,7 +78,9 @@ worktrees, or the library clone.
   walk for the library reaches the workspace.
 - **CLI-CHECKOUT-3** — The walk must stop at the filesystem root. When no
   `.toolingrc` exists, the program must report the start directory and exit with
-  a configuration error.
+  a configuration error. A sandbox row can run the walk in front of the verb,
+  and the report must wait for the verb. A verb that rejects its argument list
+  must not report a configuration error.
 - **CLI-CHECKOUT-4** — A worktree holds its own `.toolingrc`, so a worktree is a
   checkout of its own. The program must not cut a path at a `.claude/worktrees/`
   marker to find a checkout, except where TRACE-NAME says so.
