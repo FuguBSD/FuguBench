@@ -237,8 +237,9 @@ sub checkout ( $self, $checkout = undef )
 # $self->command(\@cmd, %args):
 #	Run one child command through Fugu::Process->run, as an
 #	argument list and never through a shell. The remaining
-#	arguments reach Fugu::Process->run, so a caller names cwd,
-#	stdin, env or timeout there.
+#	arguments reach Fugu::Process->run, so a caller of the plain
+#	form names cwd, stdin, env or timeout there. The group form
+#	takes another set, and _group names it.
 #
 #	The method writes the command line to standard error under
 #	--verbose, before the child runs. It writes the captured

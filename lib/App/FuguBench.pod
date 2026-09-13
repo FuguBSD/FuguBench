@@ -99,6 +99,11 @@ and C<inherit>. It takes neither C<cwd> nor C<timeout>, and it drops
 each one in silence. A caller that needs one of those two uses the
 plain form.
 
+C<stdin> carries one name and two meanings. The plain form takes a
+string, and it writes that string to the child. The group form takes a
+path, and it opens that path as the standard input of the child. The
+group form reads F</dev/null> without the argument.
+
 =head2 child
 
 C<child> returns the pid of the running child of the group form, or
