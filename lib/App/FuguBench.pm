@@ -32,6 +32,8 @@ use Fugu::Process;
 use Fugu::Sandbox;
 
 use App::FuguBench::Checkout;
+use App::FuguBench::Deps;
+use App::FuguBench::Fetch;
 use App::FuguBench::Traces;
 use App::FuguBench::Version;
 use App::FuguBench::Wiki;
@@ -59,6 +61,8 @@ my @VERBS = (
 	[ 'version',  'App::FuguBench::Version' ],
 	[ 'wiki',     'App::FuguBench::Wiki' ],
 	[ 'worktree', 'App::FuguBench::Worktree' ],
+	[ 'deps',     'App::FuguBench::Deps' ],
+	[ 'fetch',    'App::FuguBench::Fetch' ],
 );
 
 # The sandbox row of each verb (CLI-SANDBOX). A row names the pledge
@@ -80,6 +84,16 @@ my @VERBS = (
 # unveils. The list comes from the verb, because a path of it comes
 # from an option and a path of it comes from the checkout. The two
 # other verbs that unveil are `shim` and `install` (CLI-SANDBOX-2).
+#
+# The install of `deps` runs a package manager, cpanm, and the
+# commands of an archive, and each one writes outside every path of a
+# row. So the row unveils nothing either. The file promises cover the
+# manifest read and the digest file, `proc exec` covers each child,
+# and `inet dns` covers each download.
+#
+# `fetch` runs the downloader of Fugu::Curl as a child, which writes
+# its file beside the destination and renames it. So the row holds
+# the promises of `deps`, and it unveils nothing.
 my %SANDBOX = (
 	traces => {
 		promises => 'stdio rpath',
@@ -95,6 +109,8 @@ my %SANDBOX = (
 		promises    => 'stdio rpath wpath cpath fattr proc exec',
 		subcommands => { list => 'stdio rpath proc exec' },
 	},
+	deps  => { promises => 'stdio rpath wpath cpath proc exec inet dns' },
+	fetch => { promises => 'stdio rpath wpath cpath proc exec inet dns' },
 );
 
 # The global options, in the form of Fugu::CLI. new gives the table
@@ -250,11 +266,22 @@ sub child ($self)
 	return $self->{child};
 }
 
+# $self->start:
+#	The start directory of the run: the -C value, or the current
+#	directory. A verb that reads a path relative to the start, and
+#	that walks up to no checkout, reads it here (CLI-CHECKOUT-5).
+#	`deps` is that verb, and a guest runs it out of an extracted
+#	tarball that holds no .toolingrc.
+sub start ($self)
+{
+	return $self->{cli}->option('C') // Cwd::getcwd();
+}
+
 # $self->checkout($checkout):
 #	The checkout of the run. Without an argument the walk runs on
-#	the first call, from the -C value or from the current
-#	directory. A verb that reads no checkout never starts it, so
-#	the program runs in a home with no .toolingrc.
+#	the first call, from the start directory of start(). A verb
+#	that reads no checkout never starts it, so the program runs in
+#	a home with no .toolingrc.
 #
 #	The method returns undef when no .toolingrc sits above the
 #	start. The call of the verb names the start directory in the
@@ -280,7 +307,7 @@ sub checkout ( $self, $checkout = undef )
 	unless ( $self->{walked} ) {
 		$self->{walked} = 1;
 
-		my $start = $self->{cli}->option('C') // Cwd::getcwd();
+		my $start = $self->start;
 		$self->{checkout} =
 		    App::FuguBench::Checkout->new( start => $start );
 		$self->{missing} = $start

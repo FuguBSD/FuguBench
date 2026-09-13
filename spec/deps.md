@@ -30,15 +30,23 @@ runs in-process through Fugu LIB-SIGNIFY with the engine of Fugu LIB-ED25519.
 - **DEPS-MANIFEST-5** — Without a manifest for the operating system, the verb
   must report that fact and exit zero.
 - **DEPS-MANIFEST-6** — `--dry-run` must print each command that the verb would
-  run, as one line that starts with `+ ` and holds each argument shell-quoted.
-  It must run none of them. The trace is the oracle of CLI-CONFORMANCE-2.
+  run, and it must run none of them. Each line starts with `+ ` and holds every
+  argument shell-quoted. The trace is the result of a dry run, so it goes to
+  standard output. A run without `--dry-run` must write no trace there, and
+  `--verbose` must trace each command on standard error. The trace is the oracle
+  of CLI-CONFORMANCE-2.
 - **DEPS-MANIFEST-7** — A `pkg` name and a `cpan` name must not start with a
   dash, and neither may be a URL. Both reach a package manager, which owns its
-  own check.
+  own check. A `dist` URL and a `bin` URL must take the shape check of
+  DEPS-FETCH-4, because each one reaches the downloader.
 - **DEPS-MANIFEST-8** — A `dist` name is one URL. A `bin` name holds the command
   name, the URL, and, for an archive, the path of the file in the archive. An
   archive URL ends in `.tar.gz`, `.tgz`, or `.zip`, and it needs the path. A
   plain URL takes none.
+- **DEPS-MANIFEST-9** — `--verbose` must add the progress lines of the run to
+  standard error (CLI-PROGRAM-7). The lines name the entry list of each type,
+  the key that verified a signed manifest, the bootstrap of `cpanm`, and the
+  local library. A warning and an error report a fault, so no run hides one.
 
 <a id="deps-install"></a>
 
@@ -74,8 +82,12 @@ runs in-process through Fugu LIB-SIGNIFY with the engine of Fugu LIB-ED25519.
   start with a dash, which `tar` and `unzip` read as an option. The check must
   run over every line, and again after the alias words expand.
 - **DEPS-INSTALL-9** — The verb must resolve every entry of a type, and check
-  its tier, before the first install of that type. A set that one entry cannot
-  verify installs nothing, and the install directory stays as it was.
+  that a tier covers it, before the first install of that type. That pre-pass
+  reads the digest file and the key set, and it asks no network. A set with one
+  entry that no tier covers must install nothing, and the verb must make no
+  install directory. DEPS-TIER-2 states what a failed digest check leaves. The
+  install order comes from the synced `scripts/deps`, which CLI-CONFORMANCE-2
+  pins.
 - **DEPS-INSTALL-10** — On success the verb must end with one line that names
   the installed environment.
 
@@ -116,8 +128,12 @@ release directory with unique file names, so it keys on the file name.
 - **DEPS-TIER-1** — Each download must land in a temporary directory of its own.
   The verb must check the bytes before it extracts an archive, before `cpanm`
   reads a tarball, and before a file reaches the install directory.
-- **DEPS-TIER-2** — A failed check must stop the install and leave the install
-  directory as it was.
+- **DEPS-TIER-2** — A failed check must stop the install at once, and the entry
+  of that check must install nothing. The check of a digest runs at the download
+  of its entry. The verb makes the install directory of a `bin` set after the
+  pre-pass of DEPS-INSTALL-9, and before that download. An earlier entry of the
+  same set therefore stays installed. A mismatch on the first `bin` entry leaves
+  a new install directory on a host that had none.
 - **DEPS-TIER-3** — `deps/SHA256.txt` records a sha256 digest for each download
   with a versioned name. A line reads `SHA256 (url) = hexdigest`, and the key is
   the whole download URL. The verb must read and write the file through the
@@ -169,10 +185,14 @@ release directory with unique file names, so it keys on the file name.
   binds to one entry.
 - **DEPS-KEYS-4** — A key name must hold letters, digits, a dot, a dash, and an
   underscore only, and it must appear one time. A key body must decode, and a
-  digest must be 64 hexadecimal characters. Each other shape is an error that
-  names the line.
-- **DEPS-KEYS-5** — An empty key set is valid. The signify tier must then stop
-  with an error that names the empty set.
+  digest must be 64 hexadecimal characters. A key URL must take the shape check
+  of DEPS-FETCH-4, because it reaches the downloader. Each other shape is an
+  error that names the line.
+- **DEPS-KEYS-5** — An empty key set is valid. The signify tier of an install
+  must then stop with an error that names the empty set. The signed-manifest
+  probe of `deps --update-sums` must report the same fact as a warning, and the
+  refresh must go on. A manifest that no key verifies keeps the entry off the
+  digest tier (DEPS-SUMS-6).
 - **DEPS-KEYS-6** — A key of the URL form must download into a temporary
   directory on each use. The verb must hold it to the recorded digest. A cached
   copy would carry the check of an earlier entry.
@@ -241,3 +261,10 @@ the install path must not.
 - **DEPS-FETCH-3** — A probe for a signed manifest must read a 404 as the normal
   answer, and the verb must write nothing about it. A connection failure is a
   failure of the run.
+- **DEPS-FETCH-4** — A URL that reaches the downloader must start with a scheme.
+  Fugu LIB-CURL puts the URL last, and it writes no `--` separator. A URL that
+  starts with a dash then reaches the downloader as an option. A scheme starts
+  with a letter, so one rule covers both shapes. The `fetch` verb and `deps`
+  must run one shared check (CLI-PROGRAM-6). A bad URL on the `fetch` command
+  line is a usage error, so the verb must print the usage and return 2
+  (CLI-PROGRAM-3).

@@ -33,7 +33,8 @@ the sandbox, the doctor, and the conformance tests.
   check first.
 - **CLI-PROGRAM-7** — The program must be silent on success, except for the
   result line that a verb defines. A `--verbose` option adds the trace of each
-  command to standard error.
+  command to standard error. A verb can add its own progress lines to that
+  stream, and DEPS-MANIFEST-9 names the lines of `deps`.
 
 <a id="cli-verbs"></a>
 
@@ -195,4 +196,7 @@ The program replaces four scripts that have tests, and the tests come with it.
 - **CLI-CONFORMANCE-2** — The dry-run trace of `deps` over the manifests of
   every consumer must equal the trace of the synced `scripts/deps`, line for
   line. The rule holds until Tooling retires the script. The fixtures are copies
-  of the consumer manifests and digest files under `t/`.
+  of the consumer manifests and digest files under `t/`. The verb downloads
+  in-process, so the test must replace the path of the `ftp` helper with
+  `fugubench fetch`, and each temporary directory with one token. It must
+  compare the `+ ` lines, and it must change nothing else.

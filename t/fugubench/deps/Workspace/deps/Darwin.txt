@@ -1,0 +1,7 @@
+# External dependencies of the workspace. scripts/deps installs each line.
+# The GitHub CLI lists the org projects and clones each absent project. The
+# macOS release ships a zip, so this line differs from the Linux line.
+runtime bin gh https://github.com/cli/cli/releases/download/v2.97.0/gh_2.97.0_{os}_{arch}.zip gh_2.97.0_{os}_{arch}/bin/gh
+# The secret gate of make check runs gitleaks, so the tool environment
+# installs it before every other environment.
+tool bin gitleaks https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_{os}_{arch}.tar.gz gitleaks
