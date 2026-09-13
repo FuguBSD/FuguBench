@@ -50,10 +50,10 @@ C<..> segment. The verb refuses a name whose worktree would sit
 inside an existing worktree.
 
 A second C<create> of a name whose worktree exists runs the bootstrap
-again, writes the path again, and returns 0. Claude Code runs the
-WorktreeCreate hook again when a session reconnects, and that run
-must not fail. Each clone step of the bootstrap skips what exists, so
-the run repairs a bootstrap that stopped early.
+again, writes the path again, and returns 0. A caller can run the same
+create twice, and the second run does not fail. Each clone step of the
+bootstrap skips what exists, so the run repairs a bootstrap that
+stopped early.
 
 A path that exists, but that is no worktree of that name, is debris
 from a killed create. The verb refuses it, and the message names
@@ -108,6 +108,12 @@ worktree records of git. It then deletes the branch, and it removes
 each empty parent directory up to the base. It never deletes the
 branch C<main>, and never the branch that the main checkout has
 checked out.
+
+git knows no debris of a killed create, and its discovery walks up
+from the debris to the checkout above it. So the subcommand trusts no
+answer of git about such a directory. The walk for the causes reads no
+state of it, and it reads each repository below it. The branch of the
+debris is the name of the worktree, and not a branch that git reports.
 
 =head2 list
 
@@ -174,9 +180,8 @@ shape, after a source that no read reaches, and after a clone or a
 copy that fails.
 
 A missing argument, an extra argument, and an unknown subcommand give
-the usage error and return 2. A C<worktree.base> value of the wrong
-shape returns 3. C<clone> reads no base, so it returns no 3 of its
-own.
+the usage error and return 2. Every subcommand reads the base, so a
+C<worktree.base> value of the wrong shape returns 3 from each one.
 
 =head1 SEE ALSO
 
