@@ -32,6 +32,7 @@ use Fugu::Process;
 use Fugu::Sandbox;
 
 use App::FuguBench::Checkout;
+use App::FuguBench::Traces;
 use App::FuguBench::Version;
 use App::FuguBench::Wiki;
 use App::FuguBench::Worktree;
@@ -54,27 +55,38 @@ use App::FuguBench::Worktree;
 # it. The module returns the entry of the Fugu::CLI table from its
 # command class method.
 my @VERBS = (
+	[ 'traces',   'App::FuguBench::Traces' ],
 	[ 'version',  'App::FuguBench::Version' ],
 	[ 'wiki',     'App::FuguBench::Wiki' ],
 	[ 'worktree', 'App::FuguBench::Worktree' ],
 );
 
 # The sandbox row of each verb (CLI-SANDBOX). A row names the pledge
-# promises of the verb, and it names nothing else. A row that names
-# subcommands gives one promise set to each named subcommand, and the
-# promises of the row to every other one.
+# promises of the verb, and the unveil paths of a verb that opens a
+# file of its own. A row that names subcommands gives one promise set
+# to each named subcommand, and the promises of the row to every
+# other one.
 #
 # `version` opens no file, so its row holds `stdio` alone, and
-# `stdio` denies open(2). The three verbs that unveil are `shim`,
-# `install`, and `traces` (CLI-SANDBOX-2). No row of this table
-# unveils a path.
+# `stdio` denies open(2).
 #
 # `wiki` and `worktree` run git, and no row can name each file that
 # git opens. So each row unveils nothing (CLI-SANDBOX-2). git pushes,
 # so the row of `wiki` adds the network promises. The `list`
 # subcommand of `worktree` writes no file, so it drops the write
 # promises.
+#
+# `traces` opens its files itself and runs no child, so its row
+# unveils. The list comes from the verb, because a path of it comes
+# from an option and a path of it comes from the checkout. The two
+# other verbs that unveil are `shim` and `install` (CLI-SANDBOX-2).
 my %SANDBOX = (
+	traces => {
+		promises => 'stdio rpath',
+		unveil   => sub ($app) {
+			return App::FuguBench::Traces->unveil_paths($app);
+		},
+	},
 	version => { promises => 'stdio' },
 	wiki    => {
 		promises => 'stdio rpath wpath cpath fattr proc exec inet dns'
@@ -100,6 +112,7 @@ sub new ($class)
 	my $self = bless {
 		cli      => undef,
 		checkout => undef,
+		walked   => 0,
 		child    => undef,
 		error    => undef,
 	}, $class;
@@ -138,10 +151,19 @@ sub _commands ($self)
 }
 
 # $self->_sandbox($verb, $subcommand):
-#	Enter the sandbox row of one verb. The method pledges the
-#	promises of the row, or the promises that the row gives to the
-#	subcommand. On a platform other than OpenBSD the call changes
-#	nothing.
+#	Enter the sandbox row of one verb. The method unveils the
+#	paths of the row, and it pledges the promises of the row, or
+#	the promises that the row gives to the subcommand. On a
+#	platform other than OpenBSD the calls change nothing.
+#
+#	The unveil comes in front of the pledge. unveil(2) needs the
+#	`unveil` promise, no row of the table holds that promise, and
+#	a pledge in front of the call would stop the program. A row
+#	with no list unveils nothing, and the whole filesystem stays
+#	in view.
+#
+#	The row resolves here, after the option parse and before the
+#	verb, so a path of a row can come from an option.
 sub _sandbox ( $self, $verb, $subcommand = undef )
 {
 	my $row      = $SANDBOX{$verb};
@@ -149,6 +171,9 @@ sub _sandbox ( $self, $verb, $subcommand = undef )
 	my $promises = $row->{promises};
 	$promises = $named->{$subcommand}
 	    if defined $subcommand && defined $named->{$subcommand};
+
+	Fugu::Sandbox->unveil( paths => [ $row->{unveil}->($self) ] )
+	    if $row->{unveil};
 
 	Fugu::Sandbox->pledge( promises => $promises );
 
@@ -224,15 +249,21 @@ sub child ($self)
 #	start, and it names the start directory in the log. The verb
 #	then returns EXIT_CONFIG_ERROR.
 #
+#	The walk runs one time, and a failed walk stays failed. A
+#	sandbox row reads the checkout before the verb does, so a
+#	second walk would report the same absent file twice.
+#
 #	With an argument the method sets the checkout, for a verb that
 #	reads its start from a payload.
 sub checkout ( $self, $checkout = undef )
 {
 	if ( defined $checkout ) {
 		$self->{checkout} = $checkout;
+		$self->{walked}   = 1;
 		return $checkout;
 	}
-	return $self->{checkout} if defined $self->{checkout};
+	return $self->{checkout} if $self->{walked};
+	$self->{walked} = 1;
 
 	my $start = $self->{cli}->option('C') // Cwd::getcwd();
 	$self->{checkout} = App::FuguBench::Checkout->new( start => $start );

@@ -2,12 +2,13 @@
 
 ## Status
 
-Proposed. It lands after plan 001, and it waits on nothing else. After it lands,
-the Workspace swaps its `make traces` target to the verb, in a change of the
-Workspace.
+Work package 1 is in the code: the name, the match, the rows, and the sandbox
+row of `traces`. Work package 2 lands the columns and the counts, and it waits
+on nothing. After it lands, the Workspace swaps its `make traces` target to the
+verb, in a change of the Workspace.
 
-Implements: TRACE-NAME. Implements: TRACE-COLUMNS. Implements: TRACE-USAGE.
-Implements: TRACE-PANEL. Implements: TRACE-SUB.
+Implements: TRACE-COLUMNS. Implements: TRACE-USAGE. Implements: TRACE-PANEL.
+Implements: TRACE-SUB.
 
 Implements: CLI-VERBS. This plan adds the `traces` verb to the table of the
 dispatcher. The unit stays `partial` until the last verb lands.
@@ -17,11 +18,10 @@ as a read-only path. The unit stays `partial` until the last verb lands.
 
 Implements: CLI-CONFORMANCE without CLI-CONFORMANCE-2. This plan ports the
 Workspace test `t/ci/traces.t`, with the invocation and the fixture changed, as
-the CLI-CONFORMANCE-1 text of plan 002 allows. The tests of `worktree.pl` and
-`wiki.pl` come with their verbs, and the dry-run trace of `deps` comes with the
-installer. The unit stays `partial` until those plans land. The first of plans
-002, 003, and 005 to land rewords CLI-CONFORMANCE-1, and the later two point at
-the landed text.
+the landed text of CLI-CONFORMANCE-1 allows. It rewords no rule of cli.md. The
+hook subtest of the `wiki.pl` test comes with the hook verb, and the dry-run
+trace of `deps` comes with the installer. The unit stays `partial` until those
+plans land.
 
 ## Purpose
 
@@ -88,14 +88,14 @@ decode is no record.
 (CLI-PROGRAM-1), and JSON::PP is one. Fugu holds no JSON module, so no CLI-FUGU
 rule changes.
 
-**The test comes over with its invocation and its fixture changed.**
-CLI-CONFORMANCE-1, as plan 002 rewords it, holds the test to the assertions of
-the script. Two places of the test name the script: the `_traces` helper, and
-the last test, which copies the script into a nested marker path. The helper
-runs `bin/fugubench -C <checkout> traces` instead. The last test replaces the
-copy with a `-C` directory that holds the marker twice and its own `.toolingrc`.
-The boundary sessions build their paths from the `-C` directory, so no assertion
-holds an operator path.
+**The test comes over with its invocation and its fixture changed.** The landed
+text of CLI-CONFORMANCE-1 holds the test to the assertions of the script. Two
+places of the source test name the script. The first is the `_traces` helper.
+The second is the last test, which copies the script into a marker path. The
+helper runs `bin/fugubench -C <checkout> traces` instead. The last test replaces
+the copy with a `-C` directory that holds the marker twice and its own
+`.toolingrc`. The boundary sessions build their paths from the `-C` directory,
+so no assertion holds an operator path.
 
 ## The interface contract
 
@@ -120,15 +120,15 @@ list holds the shared paths of plan 001 and the trace root `r`.
 
 ## Files
 
-| File                           | Change                                                         |
-| ------------------------------ | -------------------------------------------------------------- |
-| `lib/App/FuguBench/Traces.pm`  | New: the verb                                                  |
-| `lib/App/FuguBench/Traces.pod` | New: the contract                                              |
-| `lib/App/FuguBench.pm`         | The `traces` entry and its sandbox row                         |
-| `t/fugubench/traces.t`         | New: the port of the Workspace `t/ci/traces.t`                 |
-| `spec/cli.md`                  | The rewording of CLI-CONFORMANCE-1, when this plan lands first |
-| `spec/traces.md`               | The boundary words of TRACE-PANEL-3                            |
-| `spec/STATUS.md`               | The rows of this plan                                          |
+| File                           | Change                                            |
+| ------------------------------ | ------------------------------------------------- |
+| `lib/App/FuguBench/Traces.pm`  | New: the verb                                     |
+| `lib/App/FuguBench/Traces.pod` | New: the contract                                 |
+| `lib/App/FuguBench.pm`         | The `traces` entry and its sandbox row            |
+| `t/fugubench/traces.t`         | New: the port of the Workspace `t/ci/traces.t`    |
+| `t/fugubench/traces-verb.t`    | New: the sandbox row and the failures of the verb |
+| `spec/traces.md`               | The boundary words of TRACE-PANEL-3               |
+| `spec/STATUS.md`               | The rows of this plan                             |
 
 ## Work packages
 
@@ -152,11 +152,10 @@ An implementer takes the packages in order. Each one ends in a passing
 ## Tests
 
 `t/fugubench/traces.t` is the Workspace test `t/ci/traces.t` with the invocation
-and the fixture changed, as the CLI-CONFORMANCE-1 text of plan 002 allows. It
-runs `bin/fugubench` as a child with `-Ilib`. It builds its fixture in one
-temporary tree: a checkout directory with an empty `.toolingrc`, and a trace
-root beside it. No test reads the operator home, and no test writes outside the
-tree.
+and the fixture changed, as the landed text of CLI-CONFORMANCE-1 allows. It runs
+`bin/fugubench` as a child with `-Ilib`. It builds its fixture in one temporary
+tree: a checkout directory with an empty `.toolingrc`, and a trace root beside
+it. No test reads the operator home, and no test writes outside the tree.
 
 The fixture root holds the checkout, one worktree of it, one project clone in
 it, and one sibling checkout. The checkout holds the sessions of the Workspace
@@ -175,14 +174,18 @@ test. The assertions cover:
 - With no `--name`, a `-C` directory under two markers names the inner checkout,
   and the outer checkout stays out.
 
+CLI-CONFORMANCE-1 holds that port to the assertions of the source, so every
+other assertion of the verb lives in `t/fugubench/traces-verb.t`. That file
+holds the sandbox row and the failures of the verb.
+
 ## Acceptance
 
 - `make check` passes, and `t/fugubench/traces.t` runs in `make test`.
 - The test passes on the perl of the host, with the installed Fugu.
-- `spec/STATUS.md` sets TRACE-NAME, TRACE-COLUMNS, TRACE-USAGE, TRACE-PANEL, and
-  TRACE-SUB to `done`. It keeps CLI-VERBS and CLI-SANDBOX at `partial`, with
-  `traces` gone from each note. It sets CLI-CONFORMANCE to `partial`, and the
-  note names the tests of `worktree.pl` and `wiki.pl`, and the dry-run trace of
+- `spec/STATUS.md` sets TRACE-COLUMNS, TRACE-USAGE, TRACE-PANEL, and TRACE-SUB
+  to `done`. It keeps CLI-VERBS and CLI-SANDBOX at `partial`, with `traces` gone
+  from each note. It sets CLI-CONFORMANCE to `partial`, and the note names the
+  tests of `worktree.pl` and `wiki.pl`, and the dry-run trace of
   CLI-CONFORMANCE-2.
 - The change deletes this plan.
 
