@@ -1,0 +1,137 @@
+=head1 NAME
+
+App::FuguBench::Wiki - the wiki verb of fugubench
+
+=head1 SYNOPSIS
+
+    fugubench [-C <dir>] wiki init
+    fugubench [-C <dir>] wiki open <project> <session>
+
+=head1 DESCRIPTION
+
+B<App::FuguBench::Wiki> operates the learning library: a git
+repository of flat pages, cloned into one checkout. The subcommands
+are C<init> and C<open>, and the verb reads the subcommand as its
+first argument. Every other word is an unknown subcommand, and it
+gives the usage error.
+
+Every capture commits, and then pushes. The commit carries the
+durability, and the push carries the visibility. A failed push warns,
+and the commit stays for the next push.
+
+=head2 THE LIBRARY
+
+The library is F<< <home of wiki.origin>/<wiki.dir> >>. The home of a
+key is the directory of the F<.toolingrc> that holds it. C<wiki.dir>
+has a default, and C<wiki.origin> has none, so the home of
+C<wiki.origin> anchors the path.
+
+A clone under F<Projects/> is a checkout of its own, and its root
+holds no library. Its F<.toolingrc> holds no C<wiki.origin>, so the
+walk for that key reaches the workspace above it, and the library of
+the workspace serves the clone.
+
+C<init> is the one subcommand that needs C<wiki.origin>. An absent
+key stops it with a configuration error that names the key. Every
+other subcommand treats an absent key as an absent clone: it reports
+the absence on standard error and exits 0 with no result line. No
+hook stops a session because the library is absent.
+
+=head2 init
+
+C<init> clones C<wiki.origin> into the library directory, and writes
+that directory to standard output. A second run reports the directory
+on standard error and changes nothing.
+
+A failed clone warns and exits 0. The repository can be absent, and a
+checkout without network access is normal, so the session that
+follows must still start. git removes the directory that a failed
+clone made.
+
+=head2 open
+
+C<open E<lt>projectE<gt> E<lt>sessionE<gt>> starts the session page,
+commits it, pushes it, and writes the page name to standard output as
+the only line.
+
+The page is F<< Session-<project>-<date>-<n>.md >>. Its header holds
+the title, a C<Session:> line with the session identifier, a
+C<Project:> line, an C<Opened:> line in UTC, and the heading
+C<## Observations>.
+
+The session identifier lives in the page and never in the name. A
+page that holds the identifier already ends the subcommand: it writes
+that page and changes nothing. So a start, a resume, a clear and a
+compact of one session share one page.
+
+A project token and a session token hold letters, digits, a dot, a
+dash, and an underscore. The first character is a letter or a digit,
+because a token that starts with a dash reaches git as an option. A
+token of another shape gives the usage error.
+
+=head2 THE RACE
+
+Two sessions of one day take one page name when each one counts the
+pages of a stale clone. The scheme of the name stays, and the program
+settles the race.
+
+C<open> fetches the branch of the origin before it picks
+C<< <n> >>, and it fast-forwards a local branch that holds no commit
+of its own. A clone that a session left behind then pushes without a
+retry. A failed fetch warns, and the count reads the local clone
+alone.
+
+The count takes the pages of the working tree and the pages of the
+fetched branch together, and C<< <n> >> is the first free number.
+
+A push that the origin rejects runs one loop of three tries. The loop
+fetches the branch. When the fetched branch holds the page of the
+commit, C<open> renames its page to the next free C<< <n> >> and
+amends the commit. The rename comes before the rebase, because a
+rebase of two pages of one name stops on an add/add conflict. The
+loop then rebases onto the fetched branch and pushes again. A rebase
+that stops aborts at once, so no stopped rebase stays behind.
+
+No git call carries C<--force>, because a ruleset of the library
+forbids a forced push. After the last try the verb warns, and the
+commit stays local for the next push.
+
+=head2 THE CHANNELS
+
+Standard output carries the result line of the subcommand alone,
+because a hook reads it. Every diagnostic, and every message of git,
+goes to standard error.
+
+git runs as a child with the clone as its working directory. The verb
+writes files inside the clone only, and it checks each page name
+before the path forms. A page name holds letters, digits, a dot, a
+dash, and an underscore, with a leading letter and no C<..>. It must
+not start with C<SCRATCHPAD>, because the prose lint skips that
+prefix.
+
+=head1 EXIT CODES
+
+The verb returns the exit codes of L<Fugu::CLI>. A subcommand that
+does its work returns 0. An absent clone returns 0 with no result
+line, and a failed push returns 0 with a warning.
+
+It returns 1 after a failure: a page that no write reaches, or a
+stage or a commit that fails.
+
+A missing argument, an extra argument, an unknown subcommand, and an
+invalid token give the usage error and return 2.
+
+It returns 3 after a configuration error: no F<.toolingrc> above the
+start, a C<wiki.origin> that C<init> does not find, a URL with no
+scheme, or a C<wiki.dir> value that leaves the tree.
+
+=head1 SEE ALSO
+
+L<App::FuguBench>, L<App::FuguBench::Checkout>, L<Fugu::CLI>,
+L<Fugu::File>, L<Fugu::Process>
+
+=head1 AUTHORS
+
+Dick Olsson E<lt>hi@senzilla.ioE<gt>
+
+=cut

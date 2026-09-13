@@ -10,14 +10,15 @@ The commit carries the durability, and the push carries the visibility.
 ## The clone
 
 - **WIKI-CLONE-1** — `wiki init` must clone `wiki.origin` into
-  `<root>/<wiki.dir>` when the directory is absent. A second run causes no
-  change.
+  `<home of wiki.origin>/<wiki.dir>` when the directory is absent. A second run
+  causes no change.
 - **WIKI-CLONE-2** — A failed clone must warn and exit zero. The repository can
   be absent, and a checkout without network access is normal, so the session
   that follows must still start.
 - **WIKI-CLONE-3** — A verb that needs the clone must report its absence and
-  exit zero, except `init`. No hook must stop a session because the library is
-  absent.
+  exit zero, except `init`. A verb other than `init` must treat an absent
+  `wiki.origin` as an absent clone. No hook must stop a session because the
+  library is absent.
 
 <a id="wiki-pages"></a>
 
@@ -44,7 +45,8 @@ The commit carries the durability, and the push carries the visibility.
   commit, and push. When a page holds the session identifier already, the verb
   must print that page and change nothing.
 - **WIKI-OPEN-2** — Before it picks `<n>`, the verb must fetch the origin. It
-  must count the pages of the day in the local clone and in the fetched branch
+  must fast-forward a local branch that holds no commit of its own. It must
+  count the pages of the day in the local clone and in the fetched branch
   together. A stale clone alone gave two sessions one name.
 - **WIKI-OPEN-3** — A push can fail because the origin holds a page of the same
   name. The verb must then rename its page to the next free `<n>`, amend the

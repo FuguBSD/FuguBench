@@ -2,17 +2,16 @@
 
 ## Status
 
-Proposed. It lands after plan 001, and it waits on nothing else. Plan 004 builds
-on it: `hook SessionStart` and `hook SessionEnd` call the `init`, `open`, and
-`close` subcommands of this module. The hook subcommands `hook-start` and
-`hook-end` of the Workspace script are not part of this plan. The hook subtest
-of `t/ci/wiki.t` waits for plan 004 with them.
+Package 1 landed: the module, `init`, and `open`. Packages 2 and 3 wait on
+nothing. Plan 004 builds on this plan: `hook SessionStart` and `hook SessionEnd`
+call the `init`, `open`, and `close` subcommands of this module. The hook
+subcommands `hook-start` and `hook-end` of the Workspace script are not part of
+this plan. The hook subtest of `t/ci/wiki.t` waits for plan 004 with them.
 
 The Workspace follows with a change of its own: its `.toolingrc` key and its
 callers of the script.
 
-Implements: WIKI-CLONE. Implements: WIKI-PAGES. Implements: WIKI-OPEN.
-Implements: WIKI-CAPTURE. Implements: WIKI-STATUS. Implements: WIKI-CONFINE.
+Implements: WIKI-PAGES. Implements: WIKI-CAPTURE. Implements: WIKI-STATUS.
 
 Implements: CLI-VERBS. Implements: CLI-SANDBOX. This plan adds the `wiki` verb
 and its sandbox row. Both units stay `partial` until the last verb lands.
@@ -21,8 +20,8 @@ Implements: CLI-CONFORMANCE without CLI-CONFORMANCE-2. This plan ports five
 subtests of `t/ci/wiki.t` of the Workspace. The port changes the invocation and
 the fixture, as the CLI-CONFORMANCE-1 text of plan 002 allows. The unit stays
 `partial` until the worktree, the traces, and the deps plans land their parts.
-The first of plans 002, 003, and 005 to land rewords CLI-CONFORMANCE-1, and the
-later two point at the landed text.
+Plan 002 landed that rewording of CLI-CONFORMANCE-1, and this plan points at the
+landed text.
 
 ## Purpose
 
@@ -55,18 +54,16 @@ Out of scope:
 a checkout of its own, and its root holds no library. `wiki.dir` has a default,
 so its home is the root when the file omits it. `wiki.origin` has no default, so
 its home is the directory of the file that holds it: the workspace. The library
-directory is `<home of wiki.origin>/<wiki.dir>`. The implementation changes
-`<root>/<wiki.dir>` of WIKI-CLONE-1 to that path with the code. Plan 001 lands
-the anchor in CLI-CONFIG-2, the `wiki.dir` row, and CLI-CHECKOUT-2, so this plan
-changes no rule of cli.md.
+directory is `<home of wiki.origin>/<wiki.dir>`. Plan 001 lands the anchor in
+CLI-CONFIG-2, the `wiki.dir` row, and CLI-CHECKOUT-2, so this plan changes no
+rule of cli.md.
 
 **A missing `wiki.origin` stops `init` alone.** `init` needs the key to clone,
 so an absent key stops it with a configuration error, and the message names the
 key (CLI-CONFIG-2). Every other subcommand treats an absent key as an absent
 clone: it reports the absence on standard error and exits zero (WIKI-CLONE-3).
 The table of CLI-CONFIG names `init` as the verb that stops, and WIKI-STATUS-3
-holds for `candidates`. The implementation adds the absent-key sentence to
-WIKI-CLONE-3 with the code.
+holds for `candidates`.
 
 **The fetch comes first.** `open` fetches the current branch of the origin
 before it picks `<n>`. When the local branch has no commit of its own, the verb
@@ -140,24 +137,20 @@ and `no undelivered candidate` when none exists. With no page it writes
 
 ## Files
 
-| File                         | Change                                                         |
-| ---------------------------- | -------------------------------------------------------------- |
-| `lib/App/FuguBench/Wiki.pm`  | New: the verb                                                  |
-| `lib/App/FuguBench/Wiki.pod` | New: the contract                                              |
-| `lib/App/FuguBench.pm`       | The `wiki` entry of the table, and its row                     |
-| `t/fugubench/wiki.t`         | New: the port of `t/ci/wiki.t`                                 |
-| `t/fugubench/wiki-init.t`    | New: the clone, the key, and the anchor                        |
-| `t/fugubench/wiki-push.t`    | New: the count, the rename, and the retry                      |
-| `spec/cli.md`                | The rewording of CLI-CONFORMANCE-1, when this plan lands first |
-| `spec/wiki.md`               | The path of WIKI-CLONE-1, and the absent key of WIKI-CLONE-3   |
-| `spec/STATUS.md`             | The rows of this plan                                          |
+| File                         | Change                                           |
+| ---------------------------- | ------------------------------------------------ |
+| `lib/App/FuguBench/Wiki.pm`  | The subcommands of packages 2 and 3              |
+| `lib/App/FuguBench/Wiki.pod` | The contract of each subcommand that follows     |
+| `t/fugubench/wiki.t`         | New: the port of `t/ci/wiki.t`                   |
+| `t/fugubench/wiki-push.t`    | The capture subtests of the retry and the rebase |
+| `spec/STATUS.md`             | The rows of this plan                            |
 
 ## Work packages
 
-1. **init, pages, and open.** The module, the library directory, the page and
-   token checks, and `init`. Then `open`: the fetch, the fast-forward, the union
-   count, the save path, and the retry loop with the rename. Acceptance:
-   `t/fugubench/wiki-init.t` passes, and the `open` subtests of
+1. **init, pages, and open.** Landed. The module, the library directory, the
+   page and token checks, and `init`. Then `open`: the fetch, the fast-forward,
+   the union count, the save path, and the retry loop with the rename.
+   Acceptance: `t/fugubench/wiki-init.t` passes, and the `open` subtests of
    `t/fugubench/wiki-push.t` pass.
 2. **note, admit, and close.** The append after one blank line, the `Closed:`
    line, and the idempotence of `close`. Acceptance: `t/fugubench/wiki-push.t`

@@ -1,0 +1,582 @@
+# ex:ts=8 sw=4:
+# $OpenBSD$
+#
+# Copyright (c) 2026 Dick Olsson <hi@senzilla.io>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+package App::FuguBench::Wiki;
+
+use v5.34;
+use warnings;
+use experimental 'signatures';
+no feature qw(indirect multidimensional bareword_filehandles);
+
+use File::Spec ();
+use POSIX      qw(strftime);
+
+use Fugu::CLI qw(EXIT_SUCCESS EXIT_ERROR);
+use Fugu::File;
+
+# App::FuguBench::Wiki - the wiki verb.
+#
+# The verb operates the learning library: a git repository of flat
+# pages, cloned into one checkout. The subcommands are init and open.
+# An unknown subcommand gives the usage error.
+#
+# The library is <home of wiki.origin>/<wiki.dir>. A clone under
+# Projects/ holds a .toolingrc of its own without wiki.origin, so the
+# walk for the key reaches the workspace, and the library of the
+# workspace serves the clone (CLI-CONFIG-2).
+#
+# Every capture commits, and then pushes. The commit carries the
+# durability, and the push carries the visibility. A failed push
+# warns, and the commit stays for the next push.
+#
+# The race sits in open. Two sessions of one day take one page name
+# when each one counts the pages of a stale clone. So open fetches
+# the origin before it counts, and it renames its page when the
+# origin holds the name already (D-08).
+#
+# Git runs as a child with the clone as its working directory, and
+# every message of git goes to standard error. Standard output
+# carries the result line of the subcommand alone, because a hook
+# reads it.
+
+# The subcommands of the verb. An unknown word gives the usage error.
+my %SUBCOMMAND = (
+	init => \&_init,
+	open => \&_open,
+);
+
+# The shape of a page name (WIKI-PAGES-1, WIKI-CONFINE-1). Pages stay
+# flat, so the name holds no slash. The leading letter refuses a name
+# that starts with a dot, and the test of the caller refuses a parent
+# segment.
+my $PAGE = qr{\A[A-Za-z][A-Za-z0-9._-]*\z};
+
+# The shape of a project token and a session token (WIKI-OPEN-5). The
+# first character is a letter or a digit: a token that starts with a
+# dash reaches git as an option.
+my $TOKEN = qr{\A[A-Za-z0-9][A-Za-z0-9._-]*\z};
+
+# The prefix that the prose lint skips. A page with it would never
+# meet the prose gate (WIKI-PAGES-2).
+use constant SCRATCHPAD => 'SCRATCHPAD';
+
+# The tries of one push (WIKI-CAPTURE-5).
+use constant TRIES => 3;
+
+# App::FuguBench::Wiki->command($verb):
+#	The entry of the Fugu::CLI table. The module holds one verb,
+#	so it ignores the name.
+sub command ( $, $ )
+{
+	return {
+		summary => 'operate the learning library',
+		usage   => 'init | open <project> <session>',
+		run     => sub ( $app, @argv ) { return run( $app, @argv ) },
+	};
+}
+
+# run($app, $sub, @args):
+#	Dispatch one subcommand, and return its exit code. The hook
+#	verb calls it in process, so the dispatch takes the name as an
+#	argument.
+sub run ( $app, $sub = undef, @args )
+{
+	my $body = defined $sub ? $SUBCOMMAND{$sub} : undef;
+	return $app->cli->command_usage_error('wiki') unless $body;
+
+	return $body->( $app, @args );
+}
+
+# _library($app):
+#	The exit code, the library directory, and the origin URL, in
+#	that order. The code is EXIT_SUCCESS when the checkout answers,
+#	and the method reports every failure itself.
+#
+#	The directory is undef when no .toolingrc of the walk holds
+#	wiki.origin. That key has no default, so it has no home, and
+#	the library has no path. init stops with a configuration error,
+#	and every other subcommand reports an absent clone.
+#
+#	The home of wiki.origin anchors the directory (CLI-CONFIG-2). A
+#	clone under Projects/ is a checkout of its own, and its root
+#	holds no library.
+sub _library ($app)
+{
+	my $checkout = $app->checkout
+	    or return Fugu::CLI::EXIT_CONFIG_ERROR();
+
+	my ( $origin, $home ) = $checkout->config('wiki.origin');
+	return EXIT_SUCCESS unless defined $origin;
+
+	my $log = $app->cli->log;
+	unless ( defined $checkout->url_value($origin) ) {
+		$log->error( 'wiki.origin: %s', $checkout->error );
+		return Fugu::CLI::EXIT_CONFIG_ERROR();
+	}
+
+	my ($value) = $checkout->config('wiki.dir');
+	my $dir = $checkout->dir_value($value);
+	unless ( defined $dir ) {
+		$log->error( 'wiki.dir: %s', $checkout->error );
+		return Fugu::CLI::EXIT_CONFIG_ERROR();
+	}
+
+	return ( EXIT_SUCCESS, File::Spec->catdir( $home, $dir ), $origin );
+}
+
+# _have($app, $dir):
+#	True when the library answers a subcommand that needs it
+#	(WIKI-CLONE-3). An absent key and an absent clone both report
+#	on standard error and give false. The subcommand then exits
+#	zero with no result line, so no hook stops a session.
+sub _have ( $app, $dir )
+{
+	my $log = $app->cli->log;
+	unless ( defined $dir ) {
+		$log->notice('no library, wiki.origin is unset');
+		return 0;
+	}
+	return 1 if -d $dir && -e "$dir/.git";
+
+	$log->notice( 'no library at %s', $dir );
+
+	return 0;
+}
+
+# _init($app, @argv):
+#	Clone the library when it is absent, and write its directory
+#	to standard output (WIKI-CLONE-1). A second run reports the
+#	directory on standard error and changes nothing.
+#
+#	init is the one subcommand that needs wiki.origin, so an absent
+#	key stops it with a configuration error that names the key
+#	(CLI-CONFIG-2).
+#
+#	A failed clone warns and exits zero (WIKI-CLONE-2). The
+#	repository can be absent, and a checkout without network access
+#	is normal, so the session that follows must still start.
+sub _init ( $app, @argv )
+{
+	return $app->cli->command_usage_error('wiki') if @argv;
+
+	my ( $code, $dir, $origin ) = _library($app);
+	return $code if $code != EXIT_SUCCESS;
+
+	my $log = $app->cli->log;
+	unless ( defined $dir ) {
+		$log->error('wiki.origin is unset, and init needs the URL');
+		return Fugu::CLI::EXIT_CONFIG_ERROR();
+	}
+	if ( -d $dir ) {
+		$log->notice( 'already exists, nothing to do: %s', $dir );
+		return EXIT_SUCCESS;
+	}
+
+	# git removes the directory that a failed clone made, so a
+	# warning is the whole answer here.
+	unless (
+		defined $app->command(
+			[ 'git', 'clone', '--quiet', $origin, $dir ] ) )
+	{
+		$log->warning( 'cannot clone %s, the library stays absent: %s',
+			$origin, $app->error );
+		return EXIT_SUCCESS;
+	}
+
+	say $dir;
+
+	return EXIT_SUCCESS;
+}
+
+# _open($app, @argv):
+#	Start the session page, commit it, push it, and write the page
+#	name to standard output as the only line (WIKI-OPEN-4).
+#
+#	A page that holds the session identifier already ends the
+#	subcommand: it writes that page and changes nothing
+#	(WIKI-OPEN-1). The identifier lives in the page and never in
+#	the name, so open stays idempotent across a resume and a
+#	compact (WIKI-PAGES-4).
+#
+#	The fetch comes before the count (WIKI-OPEN-2), and the rename
+#	settles a name that the origin took first (WIKI-OPEN-3).
+sub _open ( $app, @argv )
+{
+	return $app->cli->command_usage_error('wiki') if @argv != 2;
+	my ( $project, $session ) = @argv;
+
+	return $app->cli->command_usage_error('wiki')
+	    unless _token( $app, 'project', $project )
+	    && _token( $app, 'session', $session );
+
+	my ( $code, $dir ) = _library($app);
+	return $code if $code != EXIT_SUCCESS;
+	return EXIT_SUCCESS unless _have( $app, $dir );
+
+	my $log = $app->cli->log;
+	if ( my $found = _page_of_session( $dir, $session ) ) {
+		$log->notice( 'already open: %s', $found );
+		say $found;
+		return EXIT_SUCCESS;
+	}
+
+	my $branch = _branch( $app, $dir );
+	_fetch( $app, $dir, $branch ) if defined $branch;
+
+	my $date  = strftime( '%Y-%m-%d', gmtime );
+	my %taken = map { $_ => 1 } _origin_pages( $app, $dir, $branch );
+	my $n     = _free( $dir, \%taken, $project, $date );
+	my $page  = _page( $project, $date, $n );
+
+	# The tokens pass their own check, so the name above is flat by
+	# construction. The check runs on it because the name reaches
+	# the filesystem and git (CLI-PROGRAM-6).
+	my $path = _page_path( $app, $dir, $page )
+	    or return $app->cli->command_usage_error('wiki');
+
+	my $now  = strftime( '%Y-%m-%dT%H:%M:%SZ', gmtime );
+	my $text = <<"PAGE";
+# Session $project $date $n
+
+Session: $session
+Project: $project
+Opened: $now
+
+## Observations
+PAGE
+
+	unless ( Fugu::File->write( $path, $text ) ) {
+		$log->error( 'cannot write %s', $path );
+		return EXIT_ERROR;
+	}
+
+	# The rename of WIKI-OPEN-3. A rejected push fetches the
+	# branch, and the fetched branch can hold the page of the
+	# commit. A rebase of that commit stops on an add/add conflict,
+	# so the page takes the next free index first, and the commit
+	# carries the new name.
+	my $rename = sub ($pages) {
+		return 0 unless $pages->{$page};
+
+		my $next = _page( $project, $date,
+			_free( $dir, $pages, $project, $date ) );
+		return 0 unless _move( $app, $dir, $page, $next );
+		$page = $next;
+
+		return 1;
+	};
+
+	$code = _save( $app, $dir, $page, "open: $page", $rename );
+	return $code if $code != EXIT_SUCCESS;
+
+	say $page;
+
+	return EXIT_SUCCESS;
+}
+
+# _token($app, $what, $value):
+#	True when one token holds the shape of WIKI-OPEN-5. A token
+#	that fails gives a message that names it, and the caller then
+#	returns the usage error.
+sub _token ( $app, $what, $value )
+{
+	return 1 if $value =~ $TOKEN;
+
+	$app->cli->log->error( 'invalid %s: %s', $what, $value );
+
+	return 0;
+}
+
+# _page_path($app, $dir, $page):
+#	The path of one page inside the clone, or undef with a message
+#	(WIKI-CONFINE-1). The name takes the .md suffix or leaves it
+#	out (WIKI-PAGES-1).
+sub _page_path ( $app, $dir, $page )
+{
+	my $log  = $app->cli->log;
+	my $name = $page =~ s/[.]md\z//r;
+	unless ( $name =~ $PAGE && $name !~ m{[.][.]} ) {
+		$log->error( 'invalid page name: %s', $page );
+		return;
+	}
+	if ( rindex( $name, SCRATCHPAD, 0 ) == 0 ) {
+		$log->error( 'a page name must not start with %s: %s',
+			SCRATCHPAD, $page );
+		return;
+	}
+
+	return "$dir/$name.md";
+}
+
+# _page($project, $date, $n):
+#	The name of one session page (WIKI-PAGES-3).
+sub _page ( $project, $date, $n )
+{
+	return "Session-$project-$date-$n.md";
+}
+
+# _free($dir, $taken, $project, $date):
+#	The first free index of the day. The count takes the pages of
+#	the working tree and the pages of the fetched branch together
+#	(WIKI-OPEN-2). A stale clone alone gave two sessions one name.
+sub _free ( $dir, $taken, $project, $date )
+{
+	my $n = 1;
+	while (1) {
+		my $name = _page( $project, $date, $n );
+		last unless -e "$dir/$name" || $taken->{$name};
+		$n++;
+	}
+
+	return $n;
+}
+
+# _page_of_session($dir, $session):
+#	The page that records one session, or undef.
+sub _page_of_session ( $dir, $session )
+{
+	opendir my $dh, $dir or return;
+	my @pages = sort grep { /\ASession-.*[.]md\z/ } readdir $dh;
+	closedir $dh;
+
+	for my $page (@pages) {
+		my $text = Fugu::File->read("$dir/$page") // q{};
+		return $page if $text =~ /^Session: \Q$session\E$/m;
+	}
+
+	return;
+}
+
+# _branch($app, $dir):
+#	The branch that the clone has checked out, or undef. A
+#	detached HEAD gives undef, and the verb then fetches nothing
+#	and pushes nothing (WIKI-CAPTURE-6).
+sub _branch ( $app, $dir )
+{
+	my $branch = _capture( $app, $dir, 'branch', '--show-current' );
+	return unless defined $branch && length $branch;
+
+	return $branch;
+}
+
+# _fetch($app, $dir, $branch):
+#	Fetch the branch of the origin, and fast-forward a local
+#	branch that holds no commit of its own (WIKI-OPEN-2).
+#
+#	The fast-forward moves a clone that a session left behind, so
+#	its next push is a fast-forward and needs no retry. A branch
+#	with a commit of its own stays, and the push loop rebases it.
+#
+#	A failed fetch warns, and the count then reads the local clone
+#	alone: a checkout without network access is normal.
+sub _fetch ( $app, $dir, $branch )
+{
+	unless (
+		defined _git( $app, $dir, 'fetch', '--quiet', 'origin',
+			$branch ) )
+	{
+		$app->cli->log->warning(
+			'cannot fetch origin/%s, the count is local', $branch );
+		return 0;
+	}
+
+	my $own =
+	    _capture( $app, $dir, 'rev-list', '--count',
+		"origin/$branch..HEAD" );
+	_git( $app, $dir, 'merge', '--quiet', '--ff-only', "origin/$branch" )
+	    if defined $own && $own eq '0';
+
+	return 1;
+}
+
+# _origin_pages($app, $dir, $branch):
+#	Each page of the fetched branch. The list is empty when no
+#	fetch reached the origin, and the count is then local.
+sub _origin_pages ( $app, $dir, $branch )
+{
+	return () unless defined $branch;
+
+	my $out =
+	    _capture( $app, $dir, 'ls-tree', '--name-only', "origin/$branch" );
+	return () unless defined $out;
+
+	return grep { /[.]md\z/ } split /\n/, $out;
+}
+
+# _move($app, $dir, $page, $next):
+#	Rename the page of the commit, and amend the commit with the
+#	new name (WIKI-OPEN-3). The method returns 0 after a failure.
+sub _move ( $app, $dir, $page, $next )
+{
+	my $log = $app->cli->log;
+	unless ( rename "$dir/$page", "$dir/$next" ) {
+		$log->error( 'cannot rename %s to %s: %s', $page, $next, $! );
+		return 0;
+	}
+	$log->notice( 'the origin holds %s, renaming to %s', $page, $next );
+
+	# The pathspec covers the removal of the old name and the
+	# addition of the new one.
+	unless ( defined _git( $app, $dir, 'add', '-A', '--', $page, $next ) ) {
+		$log->error( 'cannot stage the rename: %s', $app->error );
+		return 0;
+	}
+	unless (
+		defined _git(
+			$app,      $dir, 'commit', '--quiet',
+			'--amend', '-m', "open: $next"
+		) )
+	{
+		$log->error( 'cannot amend the commit: %s', $app->error );
+		return 0;
+	}
+
+	return 1;
+}
+
+# _save($app, $dir, $page, $subject, $rename):
+#	Stage one page, commit it, and push it. The commit carries the
+#	durability, so a failed commit gives the failure code. The push
+#	carries the visibility, so a failed push warns alone
+#	(WIKI-CAPTURE-4).
+#
+#	A commit with nothing staged is no failure (WIKI-CAPTURE-3): a
+#	second identical capture changes nothing.
+sub _save ( $app, $dir, $page, $subject, $rename = undef )
+{
+	my $log = $app->cli->log;
+	unless ( defined _git( $app, $dir, 'add', '--', $page ) ) {
+		$log->error( 'cannot stage %s: %s', $page, $app->error );
+		return EXIT_ERROR;
+	}
+
+	my $staged = _capture( $app, $dir, 'diff', '--cached', '--name-only' );
+	unless ( defined $staged && length $staged ) {
+		$log->notice( 'no change to commit: %s', $page );
+		return EXIT_SUCCESS;
+	}
+
+	unless (
+		defined _git( $app, $dir, 'commit', '--quiet', '-m', $subject )
+	    )
+	{
+		$log->error( 'cannot commit %s: %s', $page, $app->error );
+		return EXIT_ERROR;
+	}
+
+	_push( $app, $dir, $rename );
+
+	return EXIT_SUCCESS;
+}
+
+# _push($app, $dir, $rename):
+#	Push the branch, and settle a lost race (WIKI-CAPTURE-5). The
+#	rename takes the pages of the fetched branch, and it answers
+#	true when it renamed the page of the commit. Two
+#	checkouts push to one origin, so the loser meets a rejection.
+#	The loop fetches, renames, rebases, and pushes again, three
+#	times at most. No git call carries --force, because a ruleset
+#	of the library forbids a forced push.
+#
+#	After the last try the commit stays local, and the next push
+#	takes it.
+sub _push ( $app, $dir, $rename = undef )
+{
+	my $log    = $app->cli->log;
+	my $branch = _branch( $app, $dir );
+	unless ( defined $branch ) {
+		$log->warning('detached HEAD, not pushing');
+		return 0;
+	}
+
+	for my $try ( 1 .. TRIES ) {
+		return 1
+		    if defined _git( $app, $dir, 'push', '--quiet', 'origin',
+			$branch );
+		$log->notice( 'push rejected, rebasing and retrying (%d of %d)',
+			$try, TRIES );
+		last
+		    unless defined _git( $app, $dir, 'fetch', '--quiet',
+			'origin', $branch );
+
+		# The rename comes before the rebase: a rebase of two
+		# pages of one name stops on an add/add conflict.
+		if ($rename) {
+			my %pages = map { $_ => 1 }
+			    _origin_pages( $app, $dir, $branch );
+			$rename->( \%pages );
+		}
+
+		last unless _rebase( $app, $dir, $branch );
+	}
+	$log->warning('push failed, the commit stays local');
+
+	return 0;
+}
+
+# _rebase($app, $dir, $branch):
+#	Rebase the branch onto the fetched branch. A rebase that stops
+#	aborts at once, so no stopped rebase stays behind
+#	(WIKI-OPEN-3). The method returns 0 after a failure.
+sub _rebase ( $app, $dir, $branch )
+{
+	return 1
+	    if
+	    defined _git( $app, $dir, 'rebase', '--quiet', "origin/$branch" );
+
+	$app->cli->log->error( 'the rebase stopped: %s', $app->error );
+	_git( $app, $dir, 'rebase', '--abort' ) if _rebasing( $app, $dir );
+
+	return 0;
+}
+
+# _rebasing($app, $dir):
+#	True when a rebase of the clone has stopped. The abort runs
+#	under this test alone, because an abort without a rebase in
+#	progress reports a failure of its own.
+sub _rebasing ( $app, $dir )
+{
+	my $git = _capture( $app, $dir, 'rev-parse', '--absolute-git-dir' );
+	return 0 unless defined $git;
+
+	return ( -d "$git/rebase-merge" || -d "$git/rebase-apply" ) ? 1 : 0;
+}
+
+# _git($app, $dir, @args):
+#	Run one git command with the clone as its working directory
+#	(WIKI-CONFINE-2). The captured standard error of git reaches
+#	standard error. The captured standard output stays here,
+#	because standard output carries the result line alone
+#	(CLI-PROGRAM-4).
+sub _git ( $app, $dir, @args )
+{
+	return $app->command( [ 'git', @args ], cwd => $dir );
+}
+
+# _capture($app, $dir, @args):
+#	The standard output of one git command, without the last
+#	newline, or undef when the command fails.
+sub _capture ( $app, $dir, @args )
+{
+	my $out = _git( $app, $dir, @args );
+	return unless defined $out;
+	chomp $out;
+
+	return $out;
+}
+
+1;
