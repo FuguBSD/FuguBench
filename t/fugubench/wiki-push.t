@@ -41,14 +41,23 @@ my $today = strftime( '%Y-%m-%d', gmtime );
 # _env($home):
 #	The environment of one child. The child reads the temporary
 #	tree as its home, so it reads no operator identity and no
-#	signing agent of the operator.
+#	signing agent of the operator. The child gets this environment
+#	in place of the environment of the test, so this environment
+#	must carry PERL5LIB. CI installs Fugu into a local library, and
+#	names that library in PERL5LIB.
 sub _env ($home)
 {
-	return {
+	my %env = (
 		PATH                => $ENV{PATH},
 		HOME                => $home,
 		GIT_CONFIG_NOSYSTEM => 1,
-	};
+	);
+
+	# An undefined value is an error, and a host that installs
+	# Fugu in the default @INC sets no PERL5LIB.
+	$env{PERL5LIB} = $ENV{PERL5LIB} if defined $ENV{PERL5LIB};
+
+	return \%env;
 }
 
 # _write($path, $text, %args):
