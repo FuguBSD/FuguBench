@@ -199,9 +199,10 @@ C<child> returns a pid or C<undef>.
 =head1 SEE ALSO
 
 L<App::FuguBench::Checkout>, L<App::FuguBench::Deps>,
-L<App::FuguBench::Fetch>, L<App::FuguBench::Hook>,
-L<App::FuguBench::Traces>, L<App::FuguBench::Wiki>,
-L<App::FuguBench::Worktree>, L<Fugu::CLI>, L<Fugu::Curl>,
+L<App::FuguBench::Doctor>, L<App::FuguBench::Fetch>,
+L<App::FuguBench::Hook>, L<App::FuguBench::Traces>,
+L<App::FuguBench::Wiki>, L<App::FuguBench::Worktree>,
+L<Fugu::CLI>, L<Fugu::Curl>,
 L<Fugu::File>, L<Fugu::Log>, L<Fugu::Process>, L<Fugu::Sandbox>
 
 =head1 AUTHORS
