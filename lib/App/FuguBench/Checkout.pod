@@ -6,9 +6,10 @@ reader
 =head1 SYNOPSIS
 
     use App::FuguBench::Checkout;
+    use Fugu::CLI ();
 
-    my $checkout = App::FuguBench::Checkout->new(start => $dir)
-        or return EXIT_CONFIG_ERROR;
+    my $checkout = App::FuguBench::Checkout->new(start => $start)
+        or return Fugu::CLI::EXIT_CONFIG_ERROR();
 
     my ($dir, $home) = $checkout->config('wiki.dir');
     $checkout->dir_value($dir) or die $checkout->error;

@@ -44,8 +44,11 @@ arguments of the verb.
 C<run(@argv)> parses the command line, enters the sandbox row of the
 verb, dispatches, and returns the exit code.
 
-An empty command line is a usage error: the method prints the usage
-on standard error and returns 2.
+A command line with no verb is a usage error: the method prints the
+usage on standard error and returns 2. A global option in front of no
+verb gives the same error. C<--help>, C<-h>, and the word C<help> ask
+for the help, and the method prints it on standard output with the
+code 0.
 
 =head2 cli
 
@@ -86,18 +89,14 @@ C<undef>.
 
 =head1 THE SANDBOX
 
-One table in this module maps each verb to its pledge promises and
-its unveil paths. The dispatcher enters the row of the verb after the
-option parse and before the body runs, so a row can name a path that
-an option gives. On a platform other than OpenBSD the calls change
-nothing.
+One table in this module holds the sandbox row of each verb. A row
+names the pledge promises of the verb, and it names nothing else. The
+dispatcher pledges the row of the verb before the body runs. On a
+platform other than OpenBSD the call changes nothing.
 
-unveil holds across an exec, and a child needs the paths of the
-system: the loader, the library directories, the shell of a make
-recipe, the git helpers, the certificate bundle, and the resolver
-files. No row can name them all. A verb that runs a child command
-therefore pledges its promises and unveils nothing. A verb that runs
-no child unveils the paths of its row and locks the view.
+C<version> opens no file, so its row holds C<stdio> alone. C<stdio>
+denies open(2), and the row names no C<rpath>. This distribution holds
+that one verb, so no row unveils a path.
 
 =head1 RETURN VALUES
 

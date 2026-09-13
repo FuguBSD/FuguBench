@@ -19,10 +19,16 @@ use lib "$RealBin/../../lib";
 
 use Fugu::Process;
 
+use App::FuguBench;
 use App::FuguBench::Checkout;
 
 my $root    = "$RealBin/../..";
 my $program = "$root/bin/fugubench";
+
+# The version of the loaded module: none in a checkout, and the stamp
+# of the dist build in a staged distribution. The child loads the
+# same file, so a literal here would hold in a checkout alone.
+my $version = App::FuguBench->VERSION // '0.0.0';
 
 # _run($dir, @argv):
 #	Run the program as a child in one directory, and return the
@@ -64,12 +70,31 @@ sub _run ( $dir, @argv )
 	);
 }
 
+# -h and the word help ask for the same help
+{
+	for my $form ( '-h', 'help' ) {
+		my $r = _run( $root, $form );
+		is( $r->{exit_code}, 0, "$form exits 0" );
+		like(
+			$r->{stdout}, qr/^usage: fugubench /m,
+			"$form prints the usage to standard output"
+		);
+		is(
+			$r->{stderr}, '',
+			"$form writes nothing to standard error"
+		);
+	}
+}
+
 # A usage error goes to standard error with exit 2 (CLI-PROGRAM-3)
 {
 	my %case = (
-		'an unknown verb' => ['nosuchverb'],
-		'a bad option'    => ['--nosuchoption'],
-		'no verb'         => [],
+		'an unknown verb'             => ['nosuchverb'],
+		'a bad option'                => ['--nosuchoption'],
+		'no verb'                     => [],
+		'a global flag with no verb'  => ['--verbose'],
+		'a global value with no verb' => [ '-C', $root ],
+		'a bare double dash'          => ['--'],
 	);
 	for my $name ( sort keys %case ) {
 		my $r = _run( $root, @{ $case{$name} } );
@@ -92,10 +117,30 @@ sub _run ( $dir, @argv )
 	is( $r->{exit_code}, 0, 'version exits 0' );
 	like(
 		$r->{stdout},
-		qr/\A fugubench \s 0\.0\.0 \s [(] Fugu \s [^)]+ [)] \n \z/x,
+		qr/\A fugubench \s \Q$version\E \s [(] Fugu \s [^)]+ [)] \n \z/x,
 		'version prints one line with both versions'
 	);
 	is( $r->{stderr}, '', 'version writes nothing to standard error' );
+}
+
+# A verb runs with a global option in front of it (CLI-PROGRAM-2)
+{
+	my %case = (
+		'--verbose' => ['--verbose'],
+		'-C <dir>'  => [ '-C', $root ],
+	);
+	for my $name ( sort keys %case ) {
+		my $r = _run( $root, @{ $case{$name} }, 'version' );
+		is( $r->{exit_code}, 0, "$name version exits 0" );
+		like(
+			$r->{stdout}, qr/\Afugubench \Q$version\E /,
+			"$name version prints the version line"
+		);
+		is(
+			$r->{stderr}, '',
+			"$name version writes nothing to standard error"
+		);
+	}
 }
 
 # The walk runs on demand, so a verb that reads no checkout runs in a

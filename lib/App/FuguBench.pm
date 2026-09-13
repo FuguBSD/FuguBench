@@ -22,7 +22,8 @@ use warnings;
 use experimental 'signatures';
 no feature qw(indirect multidimensional bareword_filehandles);
 
-use Cwd ();
+use Cwd          ();
+use Getopt::Long ();
 
 use Fugu::CLI;
 use Fugu::Process;
@@ -50,28 +51,20 @@ use App::FuguBench::Version;
 # command class method.
 my @VERBS = ( [ 'version', 'App::FuguBench::Version' ], );
 
-# The sandbox row of each verb (CLI-SANDBOX). A verb that runs a
-# child command pledges its promises and unveils nothing: unveil
-# holds across an exec, and no row can name each file of the system
-# that a child opens. A verb that runs no child unveils the paths
-# that its row builds. The build runs after the option parse, so a
-# row can name a path that an option gives.
-my %SANDBOX = (
-	version => {
-		promises => 'stdio',
-		unveil   => \&_perl_lib,
-	},
-);
+# The sandbox row of each verb (CLI-SANDBOX). A row names the pledge
+# promises of the verb, and it names nothing else.
+#
+# `version` opens no file, so its row holds `stdio` alone, and
+# `stdio` denies open(2). The first verb that opens a file adds the
+# unveil of CLI-SANDBOX-2, and the paths of its row.
+my %SANDBOX = ( version => { promises => 'stdio' }, );
 
-# _perl_lib($app):
-#	The perl library directories, read-only. A late require reads
-#	one of them. A perl that ships no site tree has none of them,
-#	so each entry is optional.
-sub _perl_lib ($)
-{
-	return
-	    map { [ $_, 'r', { optional => 1 } ] } Fugu::Sandbox->perl_lib_dirs;
-}
+# The global options, in the form of Fugu::CLI. new gives the table
+# to the dispatcher, and run reads the same table to find the verb.
+my %OPTIONS = (
+	'C=s'     => 'the directory that a verb reads as its checkout root',
+	'verbose' => 'trace each command on standard error',
+);
 
 # App::FuguBench->new:
 #	Build the dispatcher over Fugu::CLI. The global options are
@@ -87,11 +80,7 @@ sub new ($class)
 	$self->{cli} = Fugu::CLI->new(
 		name  => 'fugubench',
 		usage => '[-C <dir>] [--verbose] <verb> [options] [arguments]',
-		options => {
-			'C=s' => 'the directory that a verb reads '
-			    . 'as its checkout root',
-			'verbose' => 'trace each command on standard error',
-		},
+		options  => \%OPTIONS,
 		commands => $self->_commands,
 	);
 
@@ -101,8 +90,7 @@ sub new ($class)
 # $self->_commands:
 #	The Fugu::CLI command table. Each entry comes from the verb
 #	module, and the wrapper enters the sandbox row of the verb
-#	before the body runs. Fugu::CLI calls the body after the
-#	option parse, so a row can read an option.
+#	before the body runs.
 sub _commands ($self)
 {
 	my %table;
@@ -123,17 +111,13 @@ sub _commands ($self)
 }
 
 # $self->_sandbox($verb):
-#	Enter the sandbox row of one verb. unveil runs before pledge,
-#	because a pledge without the unveil promise stops the call.
-#	On a platform other than OpenBSD each call changes nothing.
+#	Enter the sandbox row of one verb. The method pledges the
+#	promises of the row. On a platform other than OpenBSD the
+#	call changes nothing.
 sub _sandbox ( $self, $verb )
 {
 	my $row = $SANDBOX{$verb};
 
-	if ( $row->{unveil} ) {
-		Fugu::Sandbox->unveil( paths => [ $row->{unveil}->($self) ] );
-		Fugu::Sandbox->unveil_lock;
-	}
 	Fugu::Sandbox->pledge( promises => $row->{promises} );
 
 	return $self;
@@ -142,12 +126,33 @@ sub _sandbox ( $self, $verb )
 # $self->run(@argv):
 #	Parse, enter the sandbox, dispatch, and return the exit code.
 #
-#	An empty command line is a usage error. Fugu::CLI prints the
-#	help for it and returns success, and CLI-PROGRAM-3 wants the
-#	usage on standard error with exit 2.
+#	A command line with no verb is a usage error, and a global
+#	option in front of it changes nothing. Fugu::CLI prints the
+#	help for such a line and returns success, and CLI-PROGRAM-3
+#	wants the usage on standard error with exit 2. So the method
+#	looks for the verb first, on a copy of the arguments and with
+#	the parse rules of Fugu::CLI.
+#
+#	The copy declares the global options alone. It passes an
+#	unknown option, a missing option value, and a request for the
+#	help through, so each one stays in the array and the guard
+#	passes. Fugu::CLI meets them again, and it answers or reports
+#	each one once.
 sub run ( $self, @argv )
 {
-	return $self->{cli}->usage_error unless @argv;
+	my @rest   = @argv;
+	my $parser = Getopt::Long::Parser->new;
+	$parser->configure(
+		qw(require_order bundling no_ignore_case pass_through));
+
+	my %values;
+	$parser->getoptionsfromarray( \@rest, \%values, keys %OPTIONS );
+
+	# The parse passes `--` through. It ends the options, and it
+	# is no verb and no request for the help.
+	shift @rest if @rest && $rest[0] eq q{--};
+
+	return $self->{cli}->usage_error unless @rest;
 
 	return $self->{cli}->run(@argv);
 }

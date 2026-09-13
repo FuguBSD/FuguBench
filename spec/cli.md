@@ -13,12 +13,14 @@ the sandbox, the doctor, and the conformance tests.
   perl 5.34 and core modules alone. It must load no CPAN module, and it must
   need no installed Fugu.
 - **CLI-PROGRAM-2** — The command line is
-  `fugubench [-C <dir>] <verb> [options] [arguments]`. The `-C` option names the
-  directory that a verb reads as its checkout root, before the discovery of
-  CLI-CHECKOUT.
+  `fugubench [-C <dir>] [--verbose] <verb> [options] [arguments]`. The `-C`
+  option names the directory that a verb reads as its checkout root, before the
+  discovery of CLI-CHECKOUT. CLI-PROGRAM-7 states the `--verbose` option.
 - **CLI-PROGRAM-3** — `fugubench --help` and `fugubench <verb> --help` must
   print the usage to standard output and exit 0. A usage error must print the
-  usage to standard error and exit 2.
+  usage to standard error and exit 2. A command line that holds no verb and no
+  request for the help is a usage error. A global option in front of no verb
+  does not change that.
 - **CLI-PROGRAM-4** — Standard output must carry the result of a verb only.
   Every diagnostic, and every line that a child command writes, must go to
   standard error. A hook reads standard output, so a git message must never
@@ -138,14 +140,17 @@ starts a comment.
   platform the calls change nothing.
 - **CLI-SANDBOX-2** — A verb that runs a child command must pledge its promises,
   and must unveil nothing. unveil(2) holds across an exec, and no row can name
-  each file that a child opens. A verb that runs no child must unveil the paths
-  of its row. A row names the checkout root, the install directory of
+  each file that a child opens. A verb that opens a file of its own must unveil
+  the paths of its row. A row names the checkout root, the install directory of
   DEPS-INSTALL-6, and the cache directory of DIST-SHIM. A row also names one
   temporary directory, the perl library directories, the directory of the
-  running file, and the trace root. It must unveil nothing else. The four verbs
-  that unveil are `version`, `shim`, `install`, and `traces`. Every other verb
-  unveils nothing, `deps` among them. The verbs `wiki`, `hook`, `deps`, `fetch`,
-  and `update` add a network promise.
+  running file, and the trace root. It must unveil nothing else. The three verbs
+  that unveil are `shim`, `install`, and `traces`. Every other verb unveils
+  nothing, `deps` among them. The verbs `wiki`, `hook`, `deps`, `fetch`, and
+  `update` add a network promise.
+- **CLI-SANDBOX-3** — A verb that opens no file must pledge `stdio` and must
+  unveil nothing. `stdio` denies open(2), so an unveil under it opens no file
+  and hides no file. `version` is that verb.
 
 <a id="cli-doctor"></a>
 

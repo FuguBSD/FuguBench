@@ -68,8 +68,8 @@ worktree counts as an edit of the checkout. The verb keeps that: the boundary is
 the path of TRACE-NAME-1, and `--name` does not change it. The implementation
 adds the words "of TRACE-NAME-1" to TRACE-PANEL-3 with the code.
 
-**The sandbox row needs the trace root.** `traces` runs no child command, so its
-row pledges and unveils, as plan 001 states. It needs no network promise
+**The sandbox row needs the trace root.** `traces` opens a file of its own, so
+its row pledges and unveils, as plan 001 states. It needs no network promise
 (CLI-SANDBOX-2). It reads the trace root, `~/.claude/projects/` or the `--root`
 value, and the row adds that path `r`. Plan 001 lists the trace root among the
 unveil classes of CLI-SANDBOX-2, so this plan changes no rule of cli.md. The row
