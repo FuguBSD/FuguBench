@@ -16,7 +16,8 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-# pack: build the one-file program of this repository (DIST-PACK).
+# pack: build the one-file program of this repository (DIST-PACK),
+# and the install script of its release (DIST-INSTALL-1).
 #
 # usage: pack [--version X.Y] [--out DIR]
 #
@@ -35,8 +36,17 @@
 # trace of one run follows one verb and misses the rest
 # (DIST-PACK-2).
 #
-# The script uses core modules alone, and it prints nothing on
-# success.
+# install.sh is the shim of the release with one argument list, so
+# the script runs the packed file with `shim` and keeps that text.
+# The shim verb reads the digest of the file that runs, so the script
+# pins the pack that sits beside it.
+#
+# A build of a tree with no tag carries the version 0.0.0. No release
+# holds it, so the shim of such a pack pins nothing. The script then
+# writes no install script, and it reports that on standard error.
+#
+# The script uses core modules alone, and it writes nothing to
+# standard output.
 
 use v5.34;
 use warnings;
@@ -70,6 +80,13 @@ my @FUGU = qw(
 # The heredoc terminator of a module body. Every packed line carries
 # two leading spaces, so no line of a source can end a heredoc.
 use constant MARK => 'FUGUBENCH_PACK';
+
+# The version of a build that no release stamped. scripts/dist writes
+# it into a build of a tree with no tag (DIST-VERSION-1).
+use constant NO_STAMP => '0.0.0';
+
+# The mode of the two artifacts. Each one is a program.
+use constant MODE => 0755;
 
 my $version;
 my $out = 'build';
@@ -251,6 +268,64 @@ HOOK
 	return $text . $program;
 }
 
+# _write($path, $text):
+#	Write one artifact of the out directory. Both artifacts are
+#	programs, so each one takes the mode of a program.
+sub _write ( $path, $text )
+{
+	open my $fh, '>', $path or die "pack: write $path: $!\n";
+	print {$fh} $text;
+	close $fh or die "pack: close $path: $!\n";
+	chmod MODE, $path or die "pack: chmod $path: $!\n";
+
+	return;
+}
+
+# _release($tarball):
+#	The version of the tarball that scripts/dist built. The name
+#	of the tarball carries it, and the stamp of the staged
+#	modules holds the same value.
+sub _release ($tarball)
+{
+	$tarball =~ /-([0-9]+(?:\.[0-9]+)+)\.tar\.gz\z/
+	    or die "pack: '$tarball' names no version\n";
+
+	return $1;
+}
+
+# _shim($packed):
+#	The shim text of one packed file, from the `shim` verb of that
+#	file. The verb reads the digest of the file that runs, so the
+#	text pins the pack that the script wrote (DIST-SHIM-1).
+sub _shim ($packed)
+{
+	open my $fh, '-|', $^X, $packed, 'shim'
+	    or die "pack: cannot run $packed: $!\n";
+	local $/ = undef;
+	my $text = <$fh>;
+	close $fh or die 'pack: the shim verb exited ' . ( $? >> 8 ) . "\n";
+
+	return $text;
+}
+
+# _script($version, $shim):
+#	The text of install.sh: the shim of the release, with one
+#	argument list in front of it (DIST-INSTALL-1). `set --` writes
+#	that list, and the shim execs the packed file with it. So the
+#	download, the digest check, and the cache are those of the
+#	shim.
+sub _script ( $version, $shim )
+{
+	return <<"HEAD" . $shim;
+#!/bin/sh
+# The install script of fugubench $version. scripts/pack writes it
+# beside the packed file, and the release workflow publishes it. The
+# text below is the shim of this release, and the argument list makes
+# the shim run `fugubench install`.
+set -- install
+HEAD
+}
+
 my $tarball = _build( $version, $out );
 my $dir     = File::Temp->newdir(
 	TEMPLATE => 'fugubench-pack-XXXXXXXX',
@@ -263,7 +338,18 @@ my $text   = _pack( \%source, _program($stage) );
 
 make_path($out);
 my $packed = File::Spec->catfile( $out, 'fugubench' );
-open my $fh, '>', $packed or die "pack: write $packed: $!\n";
-print {$fh} $text;
-close $fh or die "pack: close $packed: $!\n";
-chmod 0755, $packed or die "pack: chmod $packed: $!\n";
+_write( $packed, $text );
+
+# The install script pins one release, and it takes the pin from the
+# shim of the pack. A pack of a tree with no tag carries a version
+# that no release holds, so its shim pins nothing.
+my $release = _release($tarball);
+if ( $release eq NO_STAMP ) {
+	warn "pack: no release holds version $release,"
+	    . " so this build writes no install.sh\n";
+}
+else {
+	_write(
+		File::Spec->catfile( $out, 'install.sh' ),
+		_script( $release, _shim($packed) ) );
+}

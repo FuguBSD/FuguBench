@@ -79,10 +79,12 @@ Tooling sync, as a new `scripts/deps` is today.
 
 ## The install script and the install verb
 
-- **DIST-INSTALL-1** — `install.sh` is a release asset that the workflow writes
-  for its version. It is POSIX shell, and it holds the URL and the sha256 digest
-  of the packed file of that version. It must fetch, verify, and run
-  `fugubench install`, and nothing else.
+- **DIST-INSTALL-1** — `install.sh` is an asset that `make dist` writes for its
+  version, and the release workflow publishes. It must be the shim of DIST-SHIM
+  with `install` as its argument list. The download, the digest check, and the
+  cache are then those of the shim. A build of a tree with no tag carries the
+  version `0.0.0`. No release holds that version, so such a build must write no
+  install script.
 - **DIST-INSTALL-2** — `fugubench install` must copy the running program to
   `~/.local/bin/fugubench` with mode 755, atomically, and print the path. It
   must print a hint when `PATH` lacks the directory.
@@ -113,7 +115,7 @@ Tooling sync, as a new `scripts/deps` is today.
 
 - **DIST-KEY-1** — The program must embed the release public keys of the
   organization, in trust order, in one module. The keys are those of
-  `deps/KEYS.txt` of the org pack at build time.
+  `deps/KEYS.txt` of the org pack, and a test must hold the module to that file.
 - **DIST-KEY-2** — `update` verifies with the embedded keys alone. `deps`
   verifies with the keys of the consumer, per DEPS-KEYS, and never with the
   embedded keys. A consumer decides what it trusts.

@@ -1,12 +1,13 @@
 #!/usr/bin/env perl
 # ex:ts=8 sw=4:
-# The shim verb and the install verb (DIST-SHIM, DIST-INSTALL,
-# DIST-VERSION, CLI-SANDBOX).
+# The shim verb, the install verb, and the install script (DIST-SHIM,
+# DIST-INSTALL, DIST-VERSION, CLI-SANDBOX).
 #
 # The shim pins one release, so a checkout prints none. The file
 # therefore builds one pack with a version that no release holds, and
 # the shim cases run that pack. The build runs at the repository
-# root, as t/fugubench/pack.t does.
+# root, as t/fugubench/pack.t does. That build writes install.sh
+# beside the pack, and one case runs that script.
 #
 # A stub downloader on a temporary PATH serves the pack, so no case
 # reaches the network. Each case sets HOME to its own temporary tree,
@@ -131,7 +132,8 @@ sub _env (%extra)
 }
 
 # _pack():
-#	Build one pack in a temporary tree, and return its path.
+#	Build one pack in a temporary tree, and return the path of the
+#	packed file and the path of the install script beside it.
 sub _pack ()
 {
 	my $dir = tempdir( CLEANUP => 1 );
@@ -152,7 +154,8 @@ sub _pack ()
 	die "scripts/pack exited $r->{exit_code}: $r->{stderr}\n"
 	    unless $r->{success};
 
-	return File::Spec->catfile( $dir, 'fugubench' );
+	return map { File::Spec->catfile( $dir, $_ ) }
+	    qw(fugubench install.sh);
 }
 
 # _run($home, $path, @argv):
@@ -265,7 +268,7 @@ sub _entered (@argv)
 	};
 }
 
-my $packed = _pack();
+my ( $packed, $script ) = _pack();
 my $digest = _sha256($packed);
 my $line   = sprintf "fugubench %s (Fugu %s)\n", $VERSION, Fugu->VERSION;
 
@@ -464,6 +467,38 @@ subtest 'install copies the running file' => sub {
 	is( $p->{stdout},    "$target\n", 'and it prints the path again' );
 	is( $p->{stderr},    q{},         'and it prints no hint' );
 	is( _mode($target),  0755,        'and the mode holds' );
+};
+
+subtest 'the install script fetches the pack and installs it' => sub {
+	my $home = tempdir( CLEANUP => 1 );
+	my $bin  = tempdir( CLEANUP => 1 );
+	my $log  = "$bin/calls";
+	_write( "$bin/curl", sprintf $STUB, $log, $packed );
+	chmod 0755, "$bin/curl" or die "chmod: $!";
+
+	my $n = Fugu::Process->run(
+		cmd => [ '/bin/sh', '-n', $script ],
+		env => _env( HOME => $home ),
+	);
+	is( $n->{exit_code}, 0, 'sh -n accepts the install script' )
+	    or diag $n->{stderr};
+
+	# The script is the shim with one argument list, so it fetches
+	# and verifies as the shim does, and then it runs the install
+	# verb of the packed file (DIST-INSTALL-1).
+	my $r      = _shell( $home, $bin, $script );
+	my $target = "$home/.local/bin/fugubench";
+	is( $r->{exit_code}, 0, 'the install script exits 0' )
+	    or diag $r->{stderr};
+	is( $r->{stdout},     "$target\n", 'and it prints the installed path' );
+	is( _sha256($target), $digest, 'and the copy holds the bytes of the pack' );
+	is( _mode($target),   0755,    'and the copy holds mode 755' );
+
+	ok( -f $log, 'the script reaches the downloader' );
+	ok(
+		-f "$home/.cache/fugubench/$VERSION/fugubench",
+		'and the fetch passes through the shim cache'
+	);
 };
 
 subtest 'the two sandbox rows' => sub {
