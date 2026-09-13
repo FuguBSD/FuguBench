@@ -162,6 +162,17 @@ unveils. The list comes from the verb, because a path of it comes
 from an option and a path of it comes from the checkout.
 L<App::FuguBench::Traces> holds the list and the reason of each path.
 
+C<hook> runs the other verbs in its own process, so its row pledges
+the promises of C<wiki> and of C<worktree> together. Those verbs run
+git, so the row unveils nothing. The C<install> subcommand writes one
+file of its own, and the write promises of the row cover that write.
+The row names no unveil list, so no walk runs in front of the verb.
+
+C<doctor> runs git for the library check and for the fix, so its row
+unveils nothing too. It reads the settings file itself, and C<rpath>
+covers that read. It writes no file of its own: git writes every byte
+of the fix.
+
 The install of C<deps> runs a package manager, cpanm, and the
 commands of an archive, and each one writes outside every path of a
 row. So its row unveils nothing either. The file promises cover the
@@ -188,10 +199,11 @@ C<child> returns a pid or C<undef>.
 =head1 SEE ALSO
 
 L<App::FuguBench::Checkout>, L<App::FuguBench::Deps>,
-L<App::FuguBench::Fetch>, L<App::FuguBench::Traces>,
-L<App::FuguBench::Wiki>, L<App::FuguBench::Worktree>, L<Fugu::CLI>,
-L<Fugu::Curl>, L<Fugu::File>, L<Fugu::Log>, L<Fugu::Process>,
-L<Fugu::Sandbox>
+L<App::FuguBench::Doctor>, L<App::FuguBench::Fetch>,
+L<App::FuguBench::Hook>, L<App::FuguBench::Traces>,
+L<App::FuguBench::Wiki>, L<App::FuguBench::Worktree>,
+L<Fugu::CLI>, L<Fugu::Curl>,
+L<Fugu::File>, L<Fugu::Log>, L<Fugu::Process>, L<Fugu::Sandbox>
 
 =head1 AUTHORS
 

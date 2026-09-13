@@ -33,7 +33,9 @@ use Fugu::Sandbox;
 
 use App::FuguBench::Checkout;
 use App::FuguBench::Deps;
+use App::FuguBench::Doctor;
 use App::FuguBench::Fetch;
+use App::FuguBench::Hook;
 use App::FuguBench::Traces;
 use App::FuguBench::Version;
 use App::FuguBench::Wiki;
@@ -57,6 +59,8 @@ use App::FuguBench::Worktree;
 # it. The module returns the entry of the Fugu::CLI table from its
 # command class method.
 my @VERBS = (
+	[ 'doctor',   'App::FuguBench::Doctor' ],
+	[ 'hook',     'App::FuguBench::Hook' ],
 	[ 'traces',   'App::FuguBench::Traces' ],
 	[ 'version',  'App::FuguBench::Version' ],
 	[ 'wiki',     'App::FuguBench::Wiki' ],
@@ -85,6 +89,17 @@ my @VERBS = (
 # from an option and a path of it comes from the checkout. The two
 # other verbs that unveil are `shim` and `install` (CLI-SANDBOX-2).
 #
+# `hook` runs the other verbs in its own process, so its row pledges
+# the promises of `wiki` and of `worktree` together. Those verbs run
+# git, so the row unveils nothing. The `install` subcommand writes one
+# file of its own, and the write promises of the row cover that write.
+# The row names no unveil list, so no walk runs in front of the verb.
+#
+# `doctor` runs git for the library check and for the fix, so its row
+# unveils nothing too. It reads the settings file itself, and rpath
+# covers that read. It writes no file of its own: git writes every
+# byte of the fix.
+#
 # The install of `deps` runs a package manager, cpanm, and the
 # commands of an archive, and each one writes outside every path of a
 # row. So the row unveils nothing either. The file promises cover the
@@ -95,6 +110,10 @@ my @VERBS = (
 # its file beside the destination and renames it. So the row holds
 # the promises of `deps`, and it unveils nothing.
 my %SANDBOX = (
+	doctor => { promises => 'stdio rpath proc exec' },
+	hook   => {
+		promises => 'stdio rpath wpath cpath fattr proc exec inet dns'
+	},
 	traces => {
 		promises => 'stdio rpath',
 		unveil   => sub ($app) {
