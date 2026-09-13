@@ -58,8 +58,8 @@ three commands.
 C<command> returns a hash reference. Its body returns 0 after the
 download, and 1 after a failed one. A command line that holds other
 than two arguments is a usage error, and it returns 2. A URL that
-fails the shape check is an invalid argument, and it returns 2 as
-well.
+fails the shape check is a usage error as well: the verb names the
+fault, prints the usage on standard error, and returns 2.
 
 =head1 SEE ALSO
 

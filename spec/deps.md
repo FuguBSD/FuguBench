@@ -261,4 +261,5 @@ the install path must not.
   starts with a dash then reaches the downloader as an option. A scheme starts
   with a letter, so one rule covers both shapes. The `fetch` verb and `deps`
   must run one shared check (CLI-PROGRAM-6). A bad URL on the `fetch` command
-  line is an invalid argument, and the verb must return 2.
+  line is a usage error, so the verb must print the usage and return 2
+  (CLI-PROGRAM-3).

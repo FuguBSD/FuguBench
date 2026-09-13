@@ -636,8 +636,9 @@ sub _bin_opt ( $url, $opt, %file )
 }
 
 # The fetch verb holds its URL to the shape that the downloader
-# allows, because Fugu::Curl writes no '--' separator (DEPS-FETCH-4,
-# CLI-PROGRAM-6)
+# allows, because Fugu::Curl writes no '--' separator. A URL that
+# fails the check is a usage error (DEPS-FETCH-4, CLI-PROGRAM-6,
+# CLI-PROGRAM-3)
 {
 	# The dispatcher reads a leading dash as an option, so '--'
 	# ends the option parsing and the URL reaches the body.
@@ -652,11 +653,15 @@ sub _bin_opt ( $url, $opt, %file )
 		is( $r->{exit_code}, 2, "$want exits 2" );
 		like(
 			$r->{stderr},
-			qr/the URL must start with a scheme/,
-			"$want names the rule"
+			qr/the command line: the URL must start with a scheme/,
+			"$want names its source and the rule"
 		);
 		like( $r->{stderr}, qr/\Q$url\E/,
 			"$want names the URL" );
+		like(
+			$r->{stderr}, qr/^usage: fugubench fetch /m,
+			"$want prints the usage"
+		);
 		ok( !-e $out, "$want downloads nothing" );
 	}
 }

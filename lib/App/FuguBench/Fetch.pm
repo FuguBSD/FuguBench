@@ -84,7 +84,8 @@ sub check_url ( $app, $url, $where )
 # _run($app, @argv):
 #	The body of the verb. The arguments are the destination file
 #	and the URL, in that order, and every other command line is a
-#	usage error. A URL of the wrong shape is an invalid argument.
+#	usage error. A URL of the wrong shape is one as well, so the
+#	verb names the fault and then prints the usage (CLI-PROGRAM-3).
 sub _run ( $app, @argv )
 {
 	my $cli = $app->cli;
@@ -92,8 +93,8 @@ sub _run ( $app, @argv )
 	return $cli->command_usage_error('fetch') if @argv != 2;
 	my ( $file, $url ) = @argv;
 
-	return Fugu::CLI::EXIT_INVALID_ARGS()
-	    unless check_url( $app, $url, 'the URL' );
+	return $cli->command_usage_error('fetch')
+	    unless check_url( $app, $url, 'the command line' );
 
 	# Fugu::Curl reports an absent downloader as a failed fetch,
 	# so one branch covers it and every other failure.
