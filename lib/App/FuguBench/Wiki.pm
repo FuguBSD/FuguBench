@@ -32,7 +32,8 @@ use Fugu::File;
 #
 # The verb operates the learning library: a git repository of flat
 # pages, cloned into one checkout. The subcommands are init, open,
-# note, admit, and close. An unknown subcommand gives the usage error.
+# note, admit, close, status, and candidates. An unknown subcommand
+# gives the usage error.
 #
 # The library is <home of wiki.origin>/<wiki.dir>. A clone under
 # Projects/ holds a .toolingrc of its own without wiki.origin, so the
@@ -61,7 +62,9 @@ my %SUBCOMMAND = (
 	open  => \&_open,
 	note  => sub ( $app, @args ) { return _append( $app, 'note',  @args ) },
 	admit => sub ( $app, @args ) { return _append( $app, 'admit', @args ) },
-	close => \&_close,
+	close      => \&_close,
+	status     => \&_status,
+	candidates => \&_candidates,
 );
 
 # The shape of a page name (WIKI-PAGES-1, WIKI-CONFINE-1). Pages stay
@@ -82,6 +85,12 @@ use constant SCRATCHPAD => 'SCRATCHPAD';
 # The tries of one push (WIKI-CAPTURE-5).
 use constant TRIES => 3;
 
+# The page that holds the rule candidates (WIKI-STATUS-2).
+use constant CANDIDATES => 'Rule-candidates.md';
+
+# The seconds of one day, for the age of one candidate.
+use constant DAY => 86_400;
+
 # App::FuguBench::Wiki->command($verb):
 #	The entry of the Fugu::CLI table. The module holds one verb,
 #	so it ignores the name.
@@ -91,7 +100,7 @@ sub command ( $, $ )
 		summary => 'operate the learning library',
 		usage   => 'init | open <project> <session>'
 		    . ' | note <page> <file> | admit <page> <file>'
-		    . ' | close <session>',
+		    . ' | close <session> | status | candidates',
 		run => sub ( $app, @argv ) { return run( $app, @argv ) },
 	};
 }
@@ -121,6 +130,9 @@ sub run ( $app, $sub = undef, @args )
 #	The home of wiki.origin anchors the directory (CLI-CONFIG-2). A
 #	clone under Projects/ is a checkout of its own, and its root
 #	holds no library.
+#
+#	The directory must sit below that home, so a wiki.dir of . is
+#	a configuration error (CLI-CONFIG-3).
 sub _library ($app)
 {
 	my $checkout = $app->checkout
@@ -136,13 +148,25 @@ sub _library ($app)
 	}
 
 	my ($value) = $checkout->config('wiki.dir');
-	my $dir = $checkout->dir_value($value);
-	unless ( defined $dir ) {
+	my $name = $checkout->dir_value($value);
+	unless ( defined $name ) {
 		$log->error( 'wiki.dir: %s', $checkout->error );
 		return Fugu::CLI::EXIT_CONFIG_ERROR();
 	}
 
-	return ( EXIT_SUCCESS, File::Spec->catdir( $home, $dir ), $origin );
+	# A value of . resolves to the home itself, and that home is a
+	# checkout. A checkout holds a .git, so _have would take it for
+	# the library: open would write a session page into the
+	# checkout, and the push would carry it to the origin of the
+	# checkout. The method refuses that value (CLI-CONFIG-3).
+	my $dir = File::Spec->catdir( $home, $name );
+	if ( $dir eq $home ) {
+		$log->error( 'wiki.dir: the directory is the checkout: %s',
+			$name );
+		return Fugu::CLI::EXIT_CONFIG_ERROR();
+	}
+
+	return ( EXIT_SUCCESS, $dir, $origin );
 }
 
 # _have($app, $dir):
@@ -395,6 +419,138 @@ sub _close ( $app, @argv )
 	return EXIT_SUCCESS;
 }
 
+# _status($app, @argv):
+#	Report each open session with its page, its Claim: count, and
+#	its Admitted: count, and then the count of unpushed commits
+#	(WIKI-STATUS-1).
+#
+#	A page with no text under ## Observations is no open session.
+#	A hook opens a page for every session, and most sessions
+#	capture nothing.
+#
+#	The consolidator writes one Admitted: line for each claim that
+#	it moves into a library page. The difference is the work that
+#	the library still waits for.
+sub _status ( $app, @argv )
+{
+	return $app->cli->command_usage_error('wiki') if @argv;
+
+	my ( $code, $dir ) = _library($app);
+	return $code if $code != EXIT_SUCCESS;
+	return EXIT_SUCCESS unless _have( $app, $dir );
+
+	my @open;
+	for my $page ( _session_pages($dir) ) {
+		my $text = Fugu::File->read("$dir/$page") // q{};
+		next if $text =~ /^Closed:/m;
+
+		my ($body) = $text =~ /^[#][#] Observations$(.*)\z/ms;
+		next unless defined $body && $body =~ /\S/;
+
+		my $claims   = () = $body =~ /^Claim:/mg;
+		my $admitted = () = $body =~ /^Admitted:/mg;
+		push @open,
+		    sprintf( '%-44s %d claim(s), %d admitted',
+			$page, $claims, $admitted );
+	}
+
+	if (@open) {
+		say 'open sessions:';
+		say "  $_" for @open;
+	}
+	else {
+		say 'open sessions: none';
+	}
+
+	# A count that git does not give is unknown, and the report
+	# still ends with its last line.
+	my $unpushed = _capture( $app, $dir, 'rev-list', '--count', 'HEAD',
+		'--not', '--remotes' );
+	$unpushed = 'unknown'
+	    unless defined $unpushed && $unpushed =~ /\A[0-9]+\z/;
+	say "unpushed commits: $unpushed";
+
+	return EXIT_SUCCESS;
+}
+
+# _candidates($app, @argv):
+#	Report each undelivered rule candidate with its age in days
+#	and its date (WIKI-STATUS-2).
+#
+#	The subcommand runs inside make check, so an absent clone and
+#	an absent page both report on standard error and exit zero
+#	(WIKI-STATUS-3). A checkout without a library then passes the
+#	gate.
+sub _candidates ( $app, @argv )
+{
+	return $app->cli->command_usage_error('wiki') if @argv;
+
+	my ( $code, $dir ) = _library($app);
+	return $code if $code != EXIT_SUCCESS;
+	return EXIT_SUCCESS unless _have( $app, $dir );
+
+	my $log  = $app->cli->log;
+	my $path = "$dir/" . CANDIDATES;
+	unless ( -f $path ) {
+		$log->notice( 'no %s, nothing to report', CANDIDATES );
+		return EXIT_SUCCESS;
+	}
+
+	my $now   = time;
+	my $found = 0;
+	for my $item ( _items( Fugu::File->read($path) // q{} ) ) {
+		next if index( $item->{text}, 'Delivered:' ) >= 0;
+
+		my $age = int( ( $now - _epoch( $item->{date} ) ) / DAY );
+		printf "%4d d  %s  %s\n", $age, $item->{date}, $item->{text};
+		$found++;
+	}
+	say 'no undelivered candidate' unless $found;
+
+	return EXIT_SUCCESS;
+}
+
+# _items($text):
+#	Each candidate of the page, as a hash with a date and a text
+#	(WIKI-STATUS-2). A candidate is a list item that starts with a
+#	date, and the item takes its continuation lines.
+#
+#	The prose gate reflows the page, so Delivered: often sits on a
+#	continuation line. The join brings the whole item into one
+#	string, or the report holds a delivered candidate forever.
+sub _items ($text)
+{
+	my @items;
+	for my $line ( split /\n/, $text ) {
+		if ( $line =~ /\A-\s+([0-9]{4}-[0-9]{2}-[0-9]{2})\s+(.*)\z/ ) {
+			push @items, { date => $1, text => $2 };
+		}
+		elsif ( @items && $line =~ /\A\s+(\S.*)\z/ ) {
+			$items[-1]{text} .= " $1";
+		}
+	}
+
+	return @items;
+}
+
+# _epoch($date):
+#	The epoch second of one UTC date, by the civil algorithm of
+#	Howard Hinnant. It needs no module and no local time zone, so
+#	the age of a candidate is the same in every zone.
+sub _epoch ($date)
+{
+	my ( $y, $m, $d ) = split /-/, $date;
+
+	my $year = $y - ( $m <= 2 ? 1 : 0 );
+	my $era  = int( ( $year >= 0 ? $year : $year - 399 ) / 400 );
+	my $yoe  = $year - $era * 400;
+	my $doy =
+	    int( ( 153 * ( $m + ( $m > 2 ? -3 : 9 ) ) + 2 ) / 5 ) + $d - 1;
+	my $doe = $yoe * 365 + int( $yoe / 4 ) - int( $yoe / 100 ) + $doy;
+
+	return ( $era * 146_097 + $doe - 719_468 ) * DAY;
+}
+
 # _token($app, $what, $value):
 #	True when one token holds the shape of WIKI-OPEN-5. A token
 #	that fails gives a message that names it, and the caller then
@@ -452,15 +608,23 @@ sub _free ( $dir, $taken, $project, $date )
 	return $n;
 }
 
+# _session_pages($dir):
+#	Each session page of the clone, in sorted order. A directory
+#	that no read reaches gives the empty list.
+sub _session_pages ($dir)
+{
+	opendir my $dh, $dir or return ();
+	my @pages = sort grep { /\ASession-.*[.]md\z/ } readdir $dh;
+	closedir $dh;
+
+	return @pages;
+}
+
 # _page_of_session($dir, $session):
 #	The page that records one session, or undef.
 sub _page_of_session ( $dir, $session )
 {
-	opendir my $dh, $dir or return;
-	my @pages = sort grep { /\ASession-.*[.]md\z/ } readdir $dh;
-	closedir $dh;
-
-	for my $page (@pages) {
+	for my $page ( _session_pages($dir) ) {
 		my $text = Fugu::File->read("$dir/$page") // q{};
 		return $page if $text =~ /^Session: \Q$session\E$/m;
 	}

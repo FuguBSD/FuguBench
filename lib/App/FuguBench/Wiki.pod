@@ -9,14 +9,17 @@ App::FuguBench::Wiki - the wiki verb of fugubench
     fugubench [-C <dir>] wiki note <page> <file>
     fugubench [-C <dir>] wiki admit <page> <file>
     fugubench [-C <dir>] wiki close <session>
+    fugubench [-C <dir>] wiki status
+    fugubench [-C <dir>] wiki candidates
 
 =head1 DESCRIPTION
 
 B<App::FuguBench::Wiki> operates the learning library: a git
 repository of flat pages, cloned into one checkout. The subcommands
-are C<init>, C<open>, C<note>, C<admit>, and C<close>, and the verb
-reads the subcommand as its first argument. Every other word is an
-unknown subcommand, and it gives the usage error.
+are C<init>, C<open>, C<note>, C<admit>, C<close>, C<status>, and
+C<candidates>, and the verb reads the subcommand as its first
+argument. Every other word is an unknown subcommand, and it gives the
+usage error.
 
 Every capture commits, and then pushes. The commit carries the
 durability, and the push carries the visibility. A failed push warns,
@@ -39,6 +42,13 @@ key stops it with a configuration error that names the key. Every
 other subcommand treats an absent key as an absent clone: it reports
 the absence on standard error and exits 0 with no result line. No
 hook stops a session because the library is absent.
+
+C<wiki.dir> must name a directory below the home of C<wiki.origin>,
+so a value of C<.> is a configuration error. That value makes the
+library the home itself, and the home is a checkout. A checkout holds
+a F<.git>, so C<open> would write a session page into the checkout
+and push it to the origin of the checkout. Every subcommand refuses
+that value.
 
 =head2 init
 
@@ -97,6 +107,41 @@ already changes nothing, and a session with no page changes nothing.
 Both report on standard error and write no result line. A session
 that runs no campaign opens no page, and that is normal.
 
+=head2 status
+
+C<status> reports each open session, and then the count of unpushed
+commits. The first line is C<open sessions:>, and one indented line
+follows for each open session. The line holds the page, the C<Claim:>
+count, and the C<Admitted:> count. With no open session the first
+line is C<open sessions: none>.
+
+The consolidator writes one C<Admitted:> line for each claim that it
+moves into a library page. The difference between the two counts is
+the work that the library still waits for.
+
+A page with the C<Closed:> line is no open session, and a page with
+no text under C<## Observations> is no open session either. A hook
+opens a page for every session, and most sessions capture nothing.
+
+The last line is C<unpushed commits: E<lt>nE<gt>>. The count comes
+from git, and a count that git does not give is C<unknown>.
+
+=head2 candidates
+
+C<candidates> reads the page F<Rule-candidates.md> and reports each
+undelivered rule candidate. One line holds the age in days, the date,
+and the text: C<< <age> d  <date>  <text> >>. With no undelivered
+candidate the one line is C<no undelivered candidate>.
+
+A candidate is a list item that starts with a date. The prose gate
+reflows the page, so an item can wrap. The subcommand joins each item
+with its continuation lines before it reads the text, and a text that
+holds C<Delivered:> is done.
+
+The subcommand runs inside C<make check>. So an absent clone and an
+absent page both report on standard error and exit 0, and a checkout
+without a library passes the gate.
+
 =head2 THE RACE
 
 Two sessions of one day take one page name when each one counts the
@@ -153,7 +198,8 @@ return 2.
 
 It returns 3 after a configuration error: no F<.toolingrc> above the
 start, a C<wiki.origin> that C<init> does not find, a URL with no
-scheme, or a C<wiki.dir> value that leaves the tree.
+scheme, a C<wiki.dir> value that leaves the tree, or a C<wiki.dir>
+value that resolves to the home of C<wiki.origin>.
 
 =head1 SEE ALSO
 

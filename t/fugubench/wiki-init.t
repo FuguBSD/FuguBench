@@ -168,6 +168,29 @@ subtest 'a URL of the wrong shape is a configuration error' => sub {
 	ok( !-e "$co/Wiki", 'init makes no directory' );
 };
 
+subtest 'a wiki.dir that resolves to the home of wiki.origin' => sub {
+	my ( $tree, $origin ) = _tree();
+	my $co =
+	    _checkout( $tree, 'ws', "wiki.origin\t$origin\nwiki.dir\t.\n" );
+
+	# The home of wiki.origin is a checkout, and a checkout holds
+	# a .git. So this value makes the checkout the library: open
+	# would write a session page into the checkout, and the push
+	# would carry it to the origin of the checkout (CLI-CONFIG-3).
+	_git( $tree, 'init', '--quiet', $co );
+
+	for my $argv ( ['init'], [ 'open', 'FuguSTX', 'sess-1' ] ) {
+		my $r = _run( $tree, $co, @$argv );
+		is( $r->{exit_code}, 3, "$argv->[0] exits 3" );
+		is( $r->{stdout},    q{}, "$argv->[0] writes no result line" );
+		like( $r->{stderr}, qr/wiki[.]dir/,
+			'the message names the key' );
+	}
+
+	my @pages = glob "$co/Session-*";
+	is( scalar @pages, 0, 'no session page reaches the checkout' );
+};
+
 subtest 'no wiki.origin on the walk' => sub {
 	my ($tree) = _tree();
 	my $co = _checkout( $tree, 'bare', "# this checkout sets no key\n" );
@@ -210,11 +233,36 @@ subtest 'no clone' => sub {
 	my ( $tree, $origin ) = _tree();
 	my $co = _checkout( $tree, 'ws', "wiki.origin\t$origin\n" );
 
-	my $r = _run( $tree, $co, 'open', 'FuguSTX', 'sess-1' );
-	is( $r->{exit_code}, 0, 'open exits 0 with no clone' );
-	is( $r->{stdout},    q{}, 'open writes no result line' );
-	like( $r->{stderr}, qr/\Qno library at $co\E/,
-		'open names the absent library' );
+	# Every subcommand except init reports the absence and exits
+	# zero, so no hook stops a session (WIKI-CLONE-3). candidates
+	# runs inside make check, so it passes with no clone
+	# (WIKI-STATUS-3).
+	for my $argv ( [ 'open', 'FuguSTX', 'sess-1' ], ['status'],
+		['candidates'] )
+	{
+		my $r = _run( $tree, $co, @$argv );
+		is( $r->{exit_code}, 0, "$argv->[0] exits 0 with no clone" );
+		is( $r->{stdout}, q{}, "$argv->[0] writes no result line" );
+		like( $r->{stderr}, qr/\Qno library at $co\E/,
+			"$argv->[0] names the absent library" );
+	}
+};
+
+subtest 'a clone with no candidate page' => sub {
+	my ( $tree, $origin ) = _tree();
+	my $co = _checkout( $tree, 'ws', "wiki.origin\t$origin\n" );
+
+	my $r = _run( $tree, $co, 'init' );
+	is( $r->{exit_code}, 0, 'init clones the library' ) or diag $r->{stderr};
+
+	# The clone answers, and the page is absent. The subcommand
+	# runs inside make check, so it passes here too
+	# (WIKI-STATUS-3).
+	$r = _run( $tree, $co, 'candidates' );
+	is( $r->{exit_code}, 0, 'candidates exits 0 with no page' );
+	is( $r->{stdout},    q{}, 'candidates writes no result line' );
+	like( $r->{stderr}, qr/no Rule-candidates[.]md, nothing to report/,
+		'candidates names the absent page' );
 };
 
 subtest 'a token of the wrong shape gives the usage error' => sub {
