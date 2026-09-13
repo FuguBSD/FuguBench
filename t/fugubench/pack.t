@@ -11,6 +11,12 @@
 # PERL5LIB. The run of the packed file carries none, and its @INC
 # holds the core directories alone. The packed file must need no
 # installed Fugu (CLI-PROGRAM-1).
+#
+# Two cases hold the pack to the source floor. One reads every
+# version pragma of the text, and it runs on every host. The other
+# runs the pack on a perl 5.34, and it needs such a perl on the
+# host. The runner of CI holds none, so the first case is the gate
+# that catches a floor regression there.
 
 use v5.34;
 use warnings;
@@ -263,6 +269,19 @@ my $text   = _read($packed);
 		[ sort @packed ], [ sort @want ],
 		'the pack holds the modules of the program'
 	);
+}
+
+# Every version pragma of the pack names the floor or less (D-02).
+# A source that names a later perl runs on the perl of CI and fails
+# on the floor, so this case reads the text of the pack and needs no
+# perl 5.34 (DIST-PACK-5).
+{
+	my @above;
+	for my $line ( split /^/, $text ) {
+		next unless $line =~ /\A\s*use\s+(?:v5[.]|5[.]0)([0-9]+)\s*;/;
+		push @above, $1 if $1 > 34;
+	}
+	is( "@above", q{}, 'every version pragma of the pack names perl 5.34 or less' );
 }
 
 # No core module enters the pack (DIST-PACK-3)
