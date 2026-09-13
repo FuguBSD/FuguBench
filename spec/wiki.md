@@ -52,8 +52,10 @@ carries the visibility.
   own. It must count the pages of the day in the local clone and in the fetched
   branch together. It must find the page of the session in the working tree, or
   in the fetched branch. A clone with a commit of its own takes no fast-forward,
-  and its working tree can hide that page. A stale clone alone gave two sessions
-  one name, and it hid the page of a session that resumes.
+  and its working tree can hide that page. It must check out a page that only
+  the fetched branch holds. `note` and `close` read the working tree. A stale
+  clone alone gave two sessions one name, and it hid the page of a session that
+  resumes.
 - **WIKI-OPEN-3** — A push can fail because the origin holds a page of the same
   name. The verb must then rename its page to the next free `<n>`, amend the
   commit, and retry (D-08). It must not rebase an add/add conflict, and it must

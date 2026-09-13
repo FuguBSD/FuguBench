@@ -153,14 +153,15 @@ settles the race.
 C<open> fetches the branch of the origin before it reads the pages of
 the clone, and it fast-forwards a local branch that holds no commit
 of its own. A clone that a session left behind then pushes without a
-retry. A failed fetch warns, and the count reads the local clone
-alone.
+retry. A failed fetch warns, and the count and the search then read
+the ref of the last fetch.
 
 The search for the page of the session reads the working tree, and
 then the fetched branch. A clone with a commit of its own takes no
 fast-forward, so its working tree can miss the page that the origin
 holds. The second search finds that page, and C<open> gives the
-session no second page.
+session no second page. C<open> checks that page out into the working
+tree, because C<note> and C<close> read the working tree alone.
 
 The count takes the pages of the working tree and the pages of the
 fetched branch together, and C<< <n> >> is the first free number.

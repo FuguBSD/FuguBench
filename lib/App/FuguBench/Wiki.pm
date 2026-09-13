@@ -248,8 +248,9 @@ sub _init ( $app, @argv )
 #	fetched branch. A clone that holds a commit of its own takes no
 #	fast-forward, so its working tree can hide the page of the
 #	session, and open would then give that session a second page.
-#	The rename settles a name that the origin took first
-#	(WIKI-OPEN-3).
+#	A page of the fetched branch alone reaches the working tree,
+#	because note and close read that tree. The rename settles a
+#	name that the origin took first (WIKI-OPEN-3).
 sub _open ( $app, @argv )
 {
 	return $app->cli->command_usage_error('wiki') if @argv != 2;
@@ -268,7 +269,7 @@ sub _open ( $app, @argv )
 
 	my $log   = $app->cli->log;
 	my $found = _page_of_session( $dir, $session )
-	    // _origin_page_of_session( $app, $dir, $branch, $session );
+	    // _resume( $app, $dir, $branch, $session );
 	if ($found) {
 		$log->notice( 'already open: %s', $found );
 		say $found;
@@ -647,7 +648,9 @@ sub _session_pages ($dir)
 
 # _page_of_session($dir, $session):
 #	The page of the working tree that records one session, or
-#	undef. _origin_page_of_session reads the fetched branch.
+#	undef. open and close both read this one lookup, because
+#	_resume brings the page of the fetched branch into the working
+#	tree.
 sub _page_of_session ( $dir, $session )
 {
 	for my $page ( _session_pages($dir) ) {
@@ -697,8 +700,9 @@ sub _branch ( $app, $dir )
 #	its next push is a fast-forward and needs no retry. A branch
 #	with a commit of its own stays, and the push loop rebases it.
 #
-#	A failed fetch warns, and the count then reads the local clone
-#	alone: a checkout without network access is normal.
+#	A failed fetch warns. The count and the search then read the
+#	ref of the last fetch, and a checkout without network access
+#	is normal.
 sub _fetch ( $app, $dir, $branch )
 {
 	unless (
@@ -706,7 +710,8 @@ sub _fetch ( $app, $dir, $branch )
 			$branch ) )
 	{
 		$app->cli->log->warning(
-			'cannot fetch origin/%s, the count is local', $branch );
+			'cannot fetch origin/%s, the count can be stale',
+			$branch );
 		return 0;
 	}
 
@@ -743,7 +748,9 @@ sub _origin_pages ( $app, $dir, $branch )
 #	so its working tree can miss the page that the origin holds,
 #	and open would give that session a second page (D-08). One git
 #	grep reads the branch, because the library holds a page of
-#	every session of every day.
+#	every session of every day. Of every call that this verb
+#	parses, git colors the output of grep alone, so it carries
+#	--no-color.
 sub _origin_page_of_session ( $app, $dir, $branch, $session )
 {
 	return unless defined $branch;
@@ -752,10 +759,14 @@ sub _origin_page_of_session ( $app, $dir, $branch, $session )
 	# underscore (WIKI-OPEN-5). The dot is the one character that
 	# the pattern of git reads, so the escape takes it alone.
 	my $pattern = '^Session: ' . ( $session =~ s/[.]/\\./gr ) . '$';
-	my $out =
-	    _capture( $app, $dir, 'grep', '--name-only',
-		'--extended-regexp', '-e', $pattern, "origin/$branch", '--',
-		'Session-*.md' );
+	my $out     = _capture(
+		$app,             $dir,
+		'grep',           '--no-color',
+		'--name-only',    '--extended-regexp',
+		'-e',             $pattern,
+		"origin/$branch", '--',
+		'Session-*.md'
+	);
 	return unless defined $out && length $out;
 
 	# One line of the output is <ref>:<page>, and the first match
@@ -765,6 +776,38 @@ sub _origin_page_of_session ( $app, $dir, $branch, $session )
 	return unless rindex( $line, $prefix, 0 ) == 0;
 
 	return substr $line, length $prefix;
+}
+
+# _resume($app, $dir, $branch, $session):
+#	The page of the fetched branch that records one session,
+#	brought into the working tree, or undef (WIKI-OPEN-2).
+#
+#	A clone that holds a commit of its own takes no fast-forward,
+#	so the checkout gives it that page. note reads the file, and
+#	close reads the Session: line of the file. A page of the
+#	fetched branch alone serves neither one (WIKI-CAPTURE-1,
+#	WIKI-CAPTURE-2).
+#
+#	The name comes from the tree of the origin, so it passes the
+#	shape check before it reaches the filesystem and git
+#	(CLI-PROGRAM-6). An invalid name and a failed checkout each
+#	give undef, and open then opens a page.
+sub _resume ( $app, $dir, $branch, $session )
+{
+	my $page = _origin_page_of_session( $app, $dir, $branch, $session )
+	    or return;
+	_page_path( $app, $dir, $page ) or return;
+
+	unless (
+		defined _git( $app, $dir, 'checkout', "origin/$branch", '--',
+			$page ) )
+	{
+		$app->cli->log->error( 'cannot check out %s: %s',
+			$page, $app->error );
+		return;
+	}
+
+	return $page;
 }
 
 # _move($app, $dir, $page, $next, $title):
@@ -858,8 +901,9 @@ sub _save ( $app, $dir, $page, $subject, $rename = undef )
 #	the loop ends after it. No git call carries --force, because a
 #	ruleset of the library forbids a forced push.
 #
-#	The method answers 1 after a push, 0 after a failed push, and
-#	undef after a failed rename.
+#	The method answers 1 after a push, and undef after a failed
+#	rename. It answers 0 after a failed push, and after a detached
+#	HEAD that pushes nothing (WIKI-CAPTURE-6).
 #
 #	The rename takes the pages of the fetched branch. It answers 0
 #	when that branch holds no page of the commit, and undef after a

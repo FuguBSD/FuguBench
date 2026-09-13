@@ -3,8 +3,8 @@
 # The count of the pages, the resume of one session, the rename of a
 # page that the origin took, the capture of note and admit, and the
 # push of the wiki verb (WIKI-OPEN-1, WIKI-OPEN-2, WIKI-OPEN-3,
-# WIKI-PAGES-3, WIKI-CAPTURE-1, WIKI-CAPTURE-4, WIKI-CAPTURE-5,
-# WIKI-CAPTURE-6).
+# WIKI-PAGES-3, WIKI-CAPTURE-1, WIKI-CAPTURE-2, WIKI-CAPTURE-4,
+# WIKI-CAPTURE-5, WIKI-CAPTURE-6).
 #
 # On 2026-09-09 two parallel sessions of one day took one page name,
 # and the rebase of the loser stopped on an add/add conflict. So each
@@ -226,8 +226,7 @@ subtest 'a resume against a stale clone finds the page of its session' => sub {
 		[ _page(1) ], 'the resume adds no page' );
 };
 
-subtest 'a clone with a commit of its own finds the page of its session' =>
-    sub {
+subtest 'a clone with a commit of its own resumes a usable session' => sub {
 	my ( $tree, $origin ) = _tree();
 	my $one = _checkout( $tree, $origin, 'c1' );
 
@@ -264,6 +263,11 @@ subtest 'a clone with a commit of its own finds the page of its session' =>
 	ok( !-e "$one/Wiki/" . _page(2),
 		'the working tree misses the page of the session' );
 
+	# An operator can set color.ui to always, and git then colors
+	# the output of grep. The search of the fetched branch reads
+	# that output all the same.
+	_git( $tree, '-C', "$one/Wiki", 'config', 'color.ui', 'always' );
+
 	# The search of the session reads the fetched branch, so the
 	# resume finds that page and takes no second one (WIKI-OPEN-1,
 	# WIKI-OPEN-2).
@@ -275,7 +279,31 @@ subtest 'a clone with a commit of its own finds the page of its session' =>
 	ok( !-e "$one/Wiki/" . _page(3), 'the resume writes no third page' );
 	is_deeply( [ _pages( $tree, $origin ) ],
 		[ _page(1), _page(2) ], 'the resume adds no page' );
-    };
+
+	# The resume brings the page into the working tree, so the
+	# session stays usable: note and close both read that tree
+	# (WIKI-OPEN-2, WIKI-CAPTURE-1, WIKI-CAPTURE-2). The push of
+	# each one still meets the rebase that stops, and a failed push
+	# stops no capture (WIKI-CAPTURE-4).
+	my $path = "$one/Wiki/" . _page(2);
+	ok( -f $path, 'the resume brings the page into the working tree' );
+
+	_write( "$tree/resumed.md", "Claim: the resumed session writes.\n" );
+	$r = _run( $tree, $one, 'note', _page(2), "$tree/resumed.md" );
+	is( $r->{exit_code}, 0, 'the note of the resumed session exits 0' )
+	    or diag $r->{stderr};
+	is( $r->{stdout}, _page(2) . "\n", 'the note writes the page' );
+
+	$r = _run( $tree, $one, 'close', 'sess-1' );
+	is( $r->{exit_code}, 0, 'the close of the session exits 0' )
+	    or diag $r->{stderr};
+	is( $r->{stdout}, _page(2) . "\n", 'the close writes the page' );
+
+	my $text = Fugu::File->read($path) // q{};
+	like( $text, qr/^Claim: the resumed session writes[.]$/m,
+		'the note reaches the page' );
+	like( $text, qr/^Closed: /m, 'the Closed: line reaches the page' );
+};
 
 subtest 'a page name that the origin takes between the fetch and the push' =>
     sub {
