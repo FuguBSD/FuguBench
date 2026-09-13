@@ -2,11 +2,12 @@
 
 ## Status
 
-Work package 1 landed with the subcommands `create` and `list`. Work packages 2
-and 3 wait on nothing else. The Workspace swaps its make targets and its
-bootstrap recipe to the verb in a plan of its own. That plan follows this one.
+Work packages 1 and 2 landed with the subcommands `create`, `remove`, and
+`list`. Work package 3 waits on nothing else. The Workspace swaps its make
+targets and its bootstrap recipe to the verb in a plan of its own. That plan
+follows this one.
 
-Implements: WT-REMOVE. Implements: WT-CLONE. Implements: WT-SAFETY.
+Implements: WT-CLONE. Implements: WT-SAFETY.
 
 Implements: CLI-VERBS. Implements: CLI-SANDBOX. This plan adds the `worktree`
 row of the verb table and of the sandbox table. Both units stay `partial` until

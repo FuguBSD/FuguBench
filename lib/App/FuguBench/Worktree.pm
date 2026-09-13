@@ -35,8 +35,8 @@ use Fugu::Process;
 #
 # The verb makes, removes, and lists the worktrees of one checkout,
 # and it clones the gitignored trees of that checkout into a
-# worktree. This change holds the subcommands create and list. An
-# unknown subcommand gives the usage error.
+# worktree. This change holds the subcommands create, remove, and
+# list. An unknown subcommand gives the usage error.
 #
 # The root of the verb is the main checkout, and -C names it. A
 # linked worktree holds a .git file, not a directory, so the verb
@@ -50,11 +50,17 @@ use Fugu::Process;
 # A second create of a name whose worktree exists runs the bootstrap
 # again and writes the path again. Claude Code runs the create hook
 # again when a session reconnects, and that run must not fail.
+#
+# Only an operator runs remove, and no hook calls it (D-06). A
+# session captures its work in the clones inside its worktree, so
+# remove refuses a worktree that holds work at risk. The option
+# --force overrides that refusal.
 
 # The subcommands of this change. An unknown word gives the usage
 # error, and a subcommand of a later change is an unknown word.
 my %SUBCOMMAND = (
 	create => \&_create,
+	remove => \&_remove,
 	list   => \&_list,
 );
 
@@ -76,9 +82,12 @@ use constant MAKEFILES => qw(GNUmakefile Makefile makefile);
 sub command ( $, $ )
 {
 	return {
-		summary => 'create or list a worktree of the checkout',
-		usage   => 'create <name> | list',
-		run     => sub ( $app, @argv ) { return _run( $app, @argv ) },
+		summary => 'create, remove, or list a worktree of the checkout',
+		usage   => 'create <name> | remove [--force] <name> | list',
+		options => {
+			force => 'remove a worktree that holds work at risk'
+		},
+		run => sub ( $app, @argv ) { return _run( $app, @argv ) },
 	};
 }
 
@@ -307,6 +316,113 @@ sub _cleanup ( $app, $root, $base, $name, $wt )
 	_prune_parents( $base, $wt );
 
 	return;
+}
+
+# _remove($app, @argv):
+#	Remove one worktree of the checkout, and delete its branch
+#	(WT-REMOVE-1). Only an operator runs it, and no hook calls it.
+#
+#	Without --force the subcommand refuses a worktree that holds
+#	work at risk, and it reports each cause (WT-REMOVE-2).
+#
+#	The path resolves first, and the resolved path must sit under
+#	the base (WT-REMOVE-6). A symbolic link in the base must not
+#	permit a removal outside the base.
+sub _remove ( $app, @argv )
+{
+	return $app->cli->command_usage_error('worktree') if @argv != 1;
+	my ($name) = @argv;
+
+	my ( $code, $root, $base ) = _setup($app);
+	return $code if $code != EXIT_SUCCESS;
+
+	my $log = $app->cli->log;
+	unless ( $name =~ $NAME && $name !~ m{[.][.]} ) {
+		$log->error( 'invalid worktree name: %s', $name );
+		return EXIT_ERROR;
+	}
+
+	my $wt = File::Spec->catdir( $base, $name );
+
+	# A parallel remove can take the directory between the test and
+	# the resolution, and abs_path then gives undef. Both results
+	# reach the branch below, which is no error (WT-REMOVE-6).
+	my $resolved = -d $wt ? Cwd::abs_path($wt) : undef;
+	unless ( defined $resolved ) {
+
+		# The worktree is gone, or a user removed it by hand.
+		# The prune and the branch deletion free the name again
+		# (WT-REMOVE-4).
+		$app->command( [ 'git', '-C', $root, 'worktree', 'prune' ] );
+		my $deleted = _delete_branch( $app, $root, $name );
+		_prune_parents( $base, $wt );
+
+		return $deleted ? EXIT_SUCCESS : EXIT_ERROR;
+	}
+
+	unless ( rindex( $resolved, "$base/", 0 ) == 0 ) {
+		$log->error( 'refusing to remove %s: it resolves outside %s',
+			$name, $base );
+		return EXIT_ERROR;
+	}
+
+	# The guard of D-06: the work inside the worktree must survive.
+	# Debris from a killed create holds no session work, and no
+	# risk walk of a directory that git does not know finds one.
+	unless ( $app->cli->option('force') ) {
+		my @risk = _risks( $app, $resolved );
+		if (@risk) {
+			$log->error( '%s', $_ ) for @risk;
+			$log->error(
+				'refusing to remove %s: it holds work at '
+				    . 'risk; --force overrides',
+				$name
+			);
+			return EXIT_ERROR;
+		}
+	}
+
+	# The branch that the worktree has checked out, when git reads
+	# one. Debris from a killed create has none, and the name that
+	# create gives the branch is then the right one.
+	my $branch = _capture( $app, 'git', '-C', $resolved, 'branch',
+		'--show-current' );
+	$branch = $name unless defined $branch && length $branch;
+
+	return EXIT_ERROR unless _take( $app, $root, $resolved );
+
+	my $deleted = _delete_branch( $app, $root, $branch );
+	_prune_parents( $base, $wt );
+
+	return $deleted ? EXIT_SUCCESS : EXIT_ERROR;
+}
+
+# _take($app, $root, $wt):
+#	Take the directory of one worktree. The second --force takes a
+#	locked worktree too (WT-REMOVE-4). A directory that git does
+#	not know is debris inside the base, so the method takes the
+#	directory itself. It returns 0 when the directory stays.
+sub _take ( $app, $root, $wt )
+{
+	return 1
+	    if defined $app->command( [
+		    'git',    '-C',      $root,     'worktree',
+		    'remove', '--force', '--force', $wt
+	    ] );
+
+	my $log = $app->cli->log;
+	$log->error('git refused, deleting the directory');
+
+	# The error key stops remove_tree from dying, and the directory
+	# itself is the result: a parallel remove that takes it first is
+	# no error (WT-REMOVE-6).
+	File::Path::remove_tree( $wt, { error => \my $failed } );
+	$app->command( [ 'git', '-C', $root, 'worktree', 'prune' ] );
+	return 1 unless -d $wt;
+
+	$log->error( 'cannot remove %s', $wt );
+
+	return 0;
 }
 
 # _list($app, @argv):

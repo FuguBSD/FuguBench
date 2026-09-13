@@ -5,14 +5,15 @@ App::FuguBench::Worktree - the worktree verb of fugubench
 =head1 SYNOPSIS
 
     fugubench [-C <root>] worktree create <name>
+    fugubench [-C <root>] worktree remove [--force] <name>
     fugubench [-C <root>] worktree list
 
 =head1 DESCRIPTION
 
-B<App::FuguBench::Worktree> makes and lists the worktrees of one
-checkout. It holds the subcommands C<create> and C<list>, and it
-reads the subcommand as its first argument. Every other word is an
-unknown subcommand, and it gives the usage error.
+B<App::FuguBench::Worktree> makes, removes, and lists the worktrees
+of one checkout. It holds the subcommands C<create>, C<remove>, and
+C<list>, and it reads the subcommand as its first argument. Every
+other word is an unknown subcommand, and it gives the usage error.
 
 =head2 THE ROOT
 
@@ -73,23 +74,47 @@ branch. It prunes the worktree records of git, and each empty parent
 directory. Every step runs, also after a step that fails, so a failed
 create leaves no worktree and no branch.
 
-=head2 list
+=head2 remove
 
-C<list> reports each worktree of the base with its name, its age in
-days, and its state. The line is C<%-40s %4s d  %s>. Without a
-worktree the subcommand writes C<no worktrees>.
+C<remove [--force] E<lt>nameE<gt>> takes the worktree of that name
+and deletes its branch. Only an operator runs it, and no hook calls
+it. A session captures its work in the clones inside its worktree,
+and an automatic removal destroys that work.
 
-The state is C<clean>, or each cause that puts work at risk: an
-uncommitted change, and a commit that no remote holds. A cause names
-the repository and the reason, and C<.> names the worktree itself. An
-operator reads the state to see which worktree is safe to remove,
-because no hook removes one.
+Without C<--force> the subcommand refuses a worktree that holds work
+at risk, and it names each cause. The causes are an uncommitted
+change in the worktree or in a repository inside it, and a commit
+that no remote holds. A cause names the repository and the reason,
+and C<.> names the worktree itself. C<--force> overrides the refusal.
 
 The walk for the causes stops at each repository that it finds, and
 it skips F<scratch/> and a nested worktree directory. In a repository
 with no remote, a commit that the C<main> branch holds is safe. A
 linked worktree shares its ref store with the main checkout, so its
 count reads its own HEAD alone.
+
+The path resolves first, and the resolved path must sit under the
+base. A symbolic link in the base must not permit a removal outside
+the base. A parallel remove that takes the directory first is no
+error, and a second run changes nothing.
+
+The subcommand takes a locked worktree, debris from a killed create,
+and a worktree that a user removed by hand. When git refuses the
+directory, the subcommand deletes the directory itself and prunes the
+worktree records of git. It then deletes the branch, and it removes
+each empty parent directory up to the base. It never deletes the
+branch C<main>, and never the branch that the main checkout has
+checked out.
+
+=head2 list
+
+C<list> reports each worktree of the base with its name, its age in
+days, and its state. The line is C<%-40s %4s d  %s>. Without a
+worktree the subcommand writes C<no worktrees>.
+
+The state is C<clean>, or each cause of the refusal of C<remove>
+above. An operator reads the state to see which worktree is safe to
+remove, because no hook removes one.
 
 The age comes from the F<.git> file of the worktree. That file
 records the creation, and later work leaves it alone. A file that no
@@ -102,7 +127,9 @@ does its work returns 0.
 
 It returns 1 after a failure: a root that is no main checkout, a name
 of the wrong shape, a nest, a path that is no worktree of the name, a
-step that fails, or a signal.
+step that fails, or a signal. C<remove> returns 1 after a refusal,
+after a path that resolves outside the base, and after a directory or
+a branch that stays.
 
 A missing argument, an extra argument, and an unknown subcommand give
 the usage error and return 2. A C<worktree.base> value of the wrong

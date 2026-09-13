@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 # ex:ts=8 sw=4:
-# The create and the list subcommands of the worktree verb
-# (WT-CREATE, WT-LIST, WT-SAFETY).
+# The create, the remove, and the list subcommands of the worktree
+# verb (WT-CREATE, WT-REMOVE, WT-LIST, WT-SAFETY).
 #
 # Each case runs bin/fugubench as a child with -Ilib, against a
 # temporary repository with one commit on main and an empty
@@ -15,7 +15,7 @@ no feature qw(indirect multidimensional bareword_filehandles);
 
 use Test::More;
 use Cwd        qw(abs_path);
-use File::Path qw(make_path);
+use File::Path qw(make_path remove_tree);
 use File::Temp qw(tempdir);
 use FindBin    qw($RealBin);
 use lib "$RealBin/../../lib";
@@ -303,6 +303,182 @@ subtest 'a signal during the bootstrap leaves no worktree' => sub {
 		'the empty parent is gone (WT-CREATE-6)'
 	);
 	is_deeply( [ _branches($dir) ], ['main'], 'the branch is gone' );
+};
+
+subtest 'remove takes the worktree, the branch, and the parent' => sub {
+	my ( $dir, $real ) = _repo();
+	my $base = "$real/.claude/worktrees";
+
+	my $result = _run( $dir, 'create', 'gone/one' );
+	is( $result->{exit_code}, 0, 'create makes the worktree' )
+	    or diag $result->{stderr};
+
+	$result = _run( $dir, 'remove', 'gone/one' );
+	is( $result->{exit_code}, 0, 'remove exits 0 (WT-REMOVE-1)' )
+	    or diag $result->{stderr};
+	is( $result->{stdout}, q{}, 'remove writes no line' );
+	ok( !-e "$base/gone/one", 'the worktree is gone' );
+	ok( !-e "$base/gone",     'the empty parent is gone (WT-REMOVE-7)' );
+	is_deeply( [ _branches($dir) ],
+		['main'], 'remove deletes the branch (WT-REMOVE-1)' );
+
+	# A second run finds no directory and no branch, and it
+	# changes nothing (WT-REMOVE-4).
+	$result = _run( $dir, 'remove', 'gone/one' );
+	is( $result->{exit_code}, 0, 'a second remove exits 0 (WT-REMOVE-4)' )
+	    or diag $result->{stderr};
+	is_deeply( [ _branches($dir) ], ['main'], 'the second run keeps main' );
+};
+
+subtest 'remove takes a lock, debris, and a removal by hand' => sub {
+	my ( $dir, $real ) = _repo();
+	my $base = "$real/.claude/worktrees";
+
+	my $result = _run( $dir, 'create', 'locked' );
+	is( $result->{exit_code}, 0, 'create makes the worktree' )
+	    or diag $result->{stderr};
+	_git( '-C', $dir, 'worktree', 'lock', "$base/locked" );
+
+	$result = _run( $dir, 'remove', 'locked' );
+	is( $result->{exit_code}, 0,
+		'remove takes a locked worktree (WT-REMOVE-4)' )
+	    or diag $result->{stderr};
+	ok( !-e "$base/locked", 'the locked worktree is gone' );
+
+	# A directory that git does not know is debris from a killed
+	# create. git refuses it, and the verb takes the directory
+	# itself (WT-SAFETY-2).
+	make_path("$base/debris");
+	_write( "$base/debris/f.txt", "x\n" );
+	$result = _run( $dir, 'remove', 'debris' );
+	is( $result->{exit_code}, 0, 'remove takes debris (WT-SAFETY-2)' )
+	    or diag $result->{stderr};
+	ok( !-e "$base/debris", 'the debris is gone' );
+	like(
+		$result->{stderr},
+		qr/git refused, deleting the directory/,
+		'the message names the second step'
+	);
+
+	# A user who removes the directory by hand leaves the branch
+	# and the worktree record of git.
+	$result = _run( $dir, 'create', 'byhand' );
+	is( $result->{exit_code}, 0, 'create makes the worktree' )
+	    or diag $result->{stderr};
+	remove_tree("$base/byhand");
+	$result = _run( $dir, 'remove', 'byhand' );
+	is( $result->{exit_code}, 0,
+		'remove takes a removal by hand (WT-REMOVE-4)' )
+	    or diag $result->{stderr};
+	is_deeply( [ _branches($dir) ], ['main'], 'the branch is gone' );
+	unlike( _git( '-C', $dir, 'worktree', 'list', '--porcelain' ),
+		qr{worktrees/byhand}, 'remove prunes the worktree record' );
+};
+
+subtest 'remove refuses work at risk, and --force overrides' => sub {
+	my ( $dir, $real ) = _repo();
+	my $base = "$real/.claude/worktrees";
+
+	my $result = _run( $dir, 'create', 'dirty' );
+	is( $result->{exit_code}, 0, 'create makes the worktree' )
+	    or diag $result->{stderr};
+	_write( "$base/dirty/f.txt", "changed\n" );
+
+	$result = _run( $dir, 'remove', 'dirty' );
+	is( $result->{exit_code}, 1,
+		'remove refuses an uncommitted change (WT-REMOVE-2)' );
+	like(
+		$result->{stderr},
+		qr/\Q.: uncommitted change\E$/m,
+		'the message holds the risk line of the worktree'
+	);
+	ok( -d "$base/dirty", 'the worktree stays' );
+	is_deeply( [ _branches($dir) ],
+		[ 'dirty', 'main' ], 'the branch stays' );
+
+	$result = _run( $dir, 'remove', '--force', 'dirty' );
+	is( $result->{exit_code}, 0,
+		'--force overrides the refusal (WT-REMOVE-2)' )
+	    or diag $result->{stderr};
+	ok( !-e "$base/dirty", 'the worktree is gone after --force' );
+
+	# A commit that no remote holds is the second cause. The
+	# fixture has no remote, and main does not hold the commit.
+	$result = _run( $dir, 'create', 'ahead' );
+	is( $result->{exit_code}, 0, 'create makes the worktree' )
+	    or diag $result->{stderr};
+	_write( "$base/ahead/g.txt", "new\n" );
+	_git( '-C', "$base/ahead", 'add',    '-A' );
+	_git( '-C', "$base/ahead", 'commit', '--quiet', '-m', 'work at risk' );
+
+	$result = _run( $dir, 'remove', 'ahead' );
+	is( $result->{exit_code}, 1,
+		'remove refuses a commit that no remote holds (WT-REMOVE-2)' );
+	like(
+		$result->{stderr},
+		qr/\Q.: 1 commit(s) that no remote holds\E$/m,
+		'the message holds the risk line with the count'
+	);
+	ok( -d "$base/ahead", 'the worktree stays' );
+
+	$result = _run( $dir, 'remove', '--force', 'ahead' );
+	is( $result->{exit_code}, 0, '--force takes the worktree' )
+	    or diag $result->{stderr};
+	is_deeply( [ _branches($dir) ],
+		['main'], '--force deletes the branch' );
+};
+
+subtest 'remove never deletes main or the checked-out branch' => sub {
+	my ( $dir, $real ) = _repo();
+	my $base = "$real/.claude/worktrees";
+
+	# The root holds main, and it has another branch checked out.
+	# The two guards of WT-REMOVE-5 are then apart.
+	_git( '-C', $dir, 'checkout', '--quiet', '-b', 'keep' );
+	_git( '-C', $dir, 'worktree', 'add', '--quiet', "$base/main", 'main' );
+
+	my $result = _run( $dir, 'remove', 'main' );
+	is( $result->{exit_code}, 0, 'remove exits 0' ) or diag $result->{stderr};
+	ok( !-e "$base/main", 'the worktree of main is gone' );
+	is_deeply( [ _branches($dir) ],
+		[ 'keep', 'main' ], 'remove keeps main (WT-REMOVE-5)' );
+
+	# Debris that carries the name of the checked-out branch. git
+	# reports that branch inside the directory, and the branch
+	# must stay (WT-REMOVE-5).
+	make_path("$base/keep");
+	$result = _run( $dir, 'remove', 'keep' );
+	is( $result->{exit_code}, 0, 'remove exits 0 for the debris' )
+	    or diag $result->{stderr};
+	ok( !-e "$base/keep", 'the debris is gone' );
+	is_deeply(
+		[ _branches($dir) ],
+		[ 'keep', 'main' ],
+		'remove keeps the checked-out branch (WT-REMOVE-5)'
+	);
+};
+
+subtest 'remove refuses a link that resolves outside the base' => sub {
+	my ( $dir, $real ) = _repo();
+	my $base = "$real/.claude/worktrees";
+
+	# The target sits outside the checkout, so no risk walk of the
+	# checkout reports it and stops the removal by itself.
+	my $away = tempdir( CLEANUP => 1 );
+	_write( "$away/keep.txt", "work\n" );
+	make_path($base);
+	symlink $away, "$base/link" or die "symlink: $!";
+
+	my $result = _run( $dir, 'remove', 'link' );
+	is( $result->{exit_code}, 1,
+		'remove refuses the link (WT-REMOVE-6)' );
+	like(
+		$result->{stderr},
+		qr/resolves outside/,
+		'the message names the cause'
+	);
+	ok( -e "$away/keep.txt", 'the file outside the base stays' );
+	ok( -l "$base/link",     'the link stays' );
 };
 
 subtest 'list reports each worktree with its age and its state' => sub {
