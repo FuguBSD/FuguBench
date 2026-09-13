@@ -242,10 +242,13 @@ sub _checkout (%file)
 #	which holds no .toolingrc.
 sub _deps ( $dir, @argv )
 {
+	# --verbose is a global option, so it sits ahead of the verb.
+	my @global = grep { $_ eq '--verbose' } @argv;
+	my @option = grep { $_ ne '--verbose' } @argv;
 	my $result = Fugu::Process->run(
 		cmd => [
-			$^X,  "-I$repo/lib", $program, '-C',
-			$dir, 'deps',        @argv
+			$^X,  "-I$repo/lib", $program, @global,
+			'-C', $dir,          'deps',   @option
 		],
 		env => { PATH => $bin, HOME => $home, TMPDIR => $tmp, %LIB },
 		cwd => $tree,
@@ -394,7 +397,9 @@ sub _sums ($dir)
 		'Darwin.txt' => "test dist $url\n",
 		'KEYS.txt'   => "fugubench-test $KEY\n",
 	);
-	my $r = _refresh($dir);
+	# --verbose adds the progress lines, because the verb is silent
+	# on success without it (CLI-PROGRAM-7).
+	my $r = _refresh( $dir, '--verbose' );
 	is( $r->{exit_code}, 0, 'a placeholder entry that records exits 0' );
 	like(
 		$r->{stderr}, qr/verified the manifest with the key fugubench-test/,

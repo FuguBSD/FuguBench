@@ -374,8 +374,8 @@ sub _installed ( $dir, $name )
 		'the standard output holds the result line alone'
 	);
 	unlike(
-		$r->{stderr}, qr/^\+ /m,
-		'a run without --verbose writes no trace line'
+		$r->{stderr}, qr/\brun: /,
+		'a run without --verbose traces no command'
 	);
 	like(
 		$r->{stderr}, qr/^the child standard output$/m,
@@ -461,6 +461,32 @@ sub _installed ( $dir, $name )
 		[ _log() ],
 		['cpanm --notest Some::Module'],
 		'the standalone script runs with the options of the entry'
+	);
+}
+
+# One run writes one form of the verbose trace. An in-process
+# download and a child command take the same lead, and both join
+# their words raw (CLI-PROGRAM-7)
+{
+	# A temporary directory with a space tells the two forms
+	# apart. The shell quoting of the dry-run trace would wrap the
+	# path of the download in single quotes.
+	my $room = "$tree/with a space";
+	make_path($room);
+	my $dir = _checkout( 'Darwin.txt' => "test cpan Some::Module\n" );
+	my $r   = _deps(
+		$dir, $bare, { TMPDIR => $room }, '--verbose',
+		'--os', 'Darwin', 'test'
+	);
+	is( $r->{exit_code}, 0, 'a spaced temporary directory exits 0' );
+	like(
+		$r->{stderr},
+		qr{^\S+ \S+ INFO: run: fugubench fetch \Q$room\E/\S+/cpanm }m,
+		'the verbose line of a download joins its words raw'
+	);
+	unlike(
+		$r->{stderr}, qr{run: fugubench fetch '},
+		'the verbose line of a download takes no shell quoting'
 	);
 }
 

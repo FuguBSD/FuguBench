@@ -293,7 +293,11 @@ sub _child_home ( $where, @argv )
 #	Run the deps verb against one checkout.
 sub _deps ( $dir, @argv )
 {
-	return _child( '-C', $dir, 'deps', @argv );
+	# --verbose is a global option, so it sits ahead of the verb.
+	my @global = grep { $_ eq '--verbose' } @argv;
+	my @option = grep { $_ ne '--verbose' } @argv;
+
+	return _child( @global, '-C', $dir, 'deps', @option );
 }
 
 # _bin($url, %file):
@@ -301,9 +305,19 @@ sub _deps ( $dir, @argv )
 #	the run downloads the file and checks it.
 sub _bin ( $url, %file )
 {
+	return _bin_opt( $url, [], %file );
+}
+
+# _bin_opt($url, $opt, %file):
+#	The same run, with the options of $opt ahead of the
+#	environment. A case that asserts a progress line passes
+#	--verbose, because the verb is silent on success without it
+#	(CLI-PROGRAM-7).
+sub _bin_opt ( $url, $opt, %file )
+{
 	my $dir = _checkout( 'Darwin.txt' => "test bin tool $url\n", %file );
 
-	return _deps( $dir, '--os', 'Darwin', 'test' );
+	return _deps( $dir, @$opt, '--os', 'Darwin', 'test' );
 }
 
 # The recorded tier holds the download to the digest of
@@ -344,7 +358,8 @@ sub _bin ( $url, %file )
 # the download to it (DEPS-TIER-7, DEPS-TIER-8)
 {
 	my $url = _release('signed') . '/tool-1.0.0';
-	my $r = _bin( $url, 'KEYS.txt' => "fugubench-test $KEY\n" );
+	my $r = _bin_opt( $url, ['--verbose'],
+		'KEYS.txt' => "fugubench-test $KEY\n" );
 	is( $r->{exit_code}, 0, 'the signify tier installs the entry' );
 	like(
 		$r->{stderr}, qr/verified the manifest with the key fugubench-test/,
@@ -438,7 +453,7 @@ sub _bin ( $url, %file )
 {
 	my $url = _release('url-key') . '/tool-1.0.0';
 	my $key = "http://127.0.0.1:$port/keys/fugubench-test.pub";
-	my $r = _bin( $url,
+	my $r = _bin_opt( $url, ['--verbose'],
 		'KEYS.txt' => "fugubench-test $key $KEY_SUM\n" );
 	like(
 		$r->{stderr}, qr/verified the manifest with the key fugubench-test/,
@@ -452,8 +467,8 @@ sub _bin ( $url, %file )
 {
 	my $url = _release('next-key') . '/tool-1.0.0';
 	my $key = "http://127.0.0.1:$port/keys/fugubench-test.pub";
-	my $r   = _bin(
-		$url,
+	my $r   = _bin_opt(
+		$url, ['--verbose'],
 		'KEYS.txt'       => "fugubench-old $key $WRONG\n",
 		'KEYS.local.txt' => "fugubench-test $KEY\n",
 	);

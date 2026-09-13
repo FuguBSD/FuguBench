@@ -87,10 +87,13 @@ sub _no_home ( $dir, @argv )
 #	TMPDIR.
 sub _child ( $dir, $env, @argv )
 {
+	# --verbose is a global option, so it sits ahead of the verb.
+	my @global = grep { $_ eq '--verbose' } @argv;
+	my @option = grep { $_ ne '--verbose' } @argv;
 	my $result = Fugu::Process->run(
 		cmd => [
-			$^X,  "-I$root/lib", $program, '-C',
-			$dir, 'deps',        @argv
+			$^X,  "-I$root/lib", $program, @global,
+			'-C', $dir,          'deps',   @option
 		],
 		env => { PATH => $path, TMPDIR => $tmp, %LIB, %$env },
 	);
@@ -294,8 +297,8 @@ sub _trace ($result)
 	);
 }
 
-# The trace is the standard output, and every progress line is the
-# standard error (CLI-PROGRAM-4, DEPS-MANIFEST-6)
+# The trace is the standard output, and a progress line waits for
+# --verbose (CLI-PROGRAM-4, CLI-PROGRAM-7, DEPS-MANIFEST-6)
 {
 	my $dir = _checkout( 'Darwin.txt' => "test pkg ok\n" );
 	my $r = _deps( $dir, '--dry-run', '--os', 'Darwin', 'test' );
@@ -303,9 +306,19 @@ sub _trace ($result)
 		$r->{stdout}, "+ brew install ok\n",
 		'the trace is the whole standard output'
 	);
+	unlike(
+		$r->{stderr}, qr/the OS packages/,
+		'a run without --verbose writes no progress line'
+	);
+
+	$r = _deps( $dir, '--dry-run', '--verbose', '--os', 'Darwin', 'test' );
+	is(
+		$r->{stdout}, "+ brew install ok\n",
+		'--verbose leaves the standard output as it was'
+	);
 	like(
 		$r->{stderr}, qr/the OS packages: ok/,
-		'the progress line goes to standard error'
+		'--verbose adds the progress line to standard error'
 	);
 }
 

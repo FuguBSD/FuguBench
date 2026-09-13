@@ -710,8 +710,7 @@ sub _key_text ($key)
 sub _packages ( $ctx, @pkgs )
 {
 	my $os = $ctx->{os};
-	$ctx->{app}
-	    ->cli->log->notice( 'the OS packages: %s', join q{ }, @pkgs );
+	_note( $ctx, 'the OS packages: %s', join q{ }, @pkgs );
 
 	if ( $os eq 'OpenBSD' ) {
 		return EXIT_ERROR
@@ -749,8 +748,7 @@ sub _packages ( $ctx, @pkgs )
 #	from the synced scripts/deps, which CLI-CONFORMANCE-2 pins.
 sub _dists ( $ctx, @urls )
 {
-	$ctx->{app}
-	    ->cli->log->notice( 'the distributions: %s', join q{ }, @urls );
+	_note( $ctx, 'the distributions: %s', join q{ }, @urls );
 
 	my @resolved;
 	for my $url (@urls) {
@@ -782,8 +780,7 @@ sub _dists ( $ctx, @urls )
 #	(DEPS-INSTALL-2).
 sub _modules ( $ctx, @modules )
 {
-	$ctx->{app}
-	    ->cli->log->notice( 'the CPAN modules: %s', join q{ }, @modules );
+	_note( $ctx, 'the CPAN modules: %s', join q{ }, @modules );
 
 	my @cpanm = _cpanm($ctx);
 	return EXIT_ERROR unless @cpanm;
@@ -814,7 +811,7 @@ sub _bins ( $ctx, @bins )
 {
 	my $app = $ctx->{app};
 	my $log = $app->cli->log;
-	$log->notice( 'the binaries: %s',
+	_note( $ctx, 'the binaries: %s',
 		join q{ }, map { ( split q{ }, $_, 2 )[0] } @bins );
 
 	my $home = $ENV{HOME};
@@ -1107,7 +1104,7 @@ sub _verify ( $ctx, $sums, $sig, $level = 'error' )
 		return;
 	}
 
-	$log->notice( 'verified the manifest with the key %s', $name{$public} );
+	_note( $ctx, 'verified the manifest with the key %s', $name{$public} );
 
 	return $public;
 }
@@ -1295,8 +1292,9 @@ sub _cpanm ($ctx)
 
 	my @cmd = ('cpanm');
 	unless ( defined Fugu::Process->find_command('cpanm') ) {
-		$ctx->{app}->cli->log->notice( 'cpanm is absent, and the'
-			    . ' bootstrap downloads the standalone script' );
+		_note( $ctx,
+			      'cpanm is absent, and the bootstrap'
+			    . ' downloads the standalone script' );
 
 		my $script = File::Spec->catfile( _tempdir($ctx), 'cpanm' );
 		_trace( $ctx, $ctx->{app}->cli->name,
@@ -1327,8 +1325,7 @@ sub _options ($ctx)
 	my @opts  = ('--notest');
 	my $local = $ENV{PERL_LOCAL_LIB_ROOT};
 	if ( defined $local && length $local ) {
-		$ctx->{app}
-		    ->cli->log->notice( 'the local library: %s', $local );
+		_note( $ctx, 'the local library: %s', $local );
 		push @opts, "--local-lib=$local";
 	}
 	$ctx->{options} = \@opts;
@@ -1924,6 +1921,21 @@ sub _command ( $ctx, @cmd )
 	return 1;
 }
 
+# _note($ctx, $fmt, @args):
+#	Report one step of the run on standard error. The line goes
+#	out under --verbose alone, because the program is silent on
+#	success except for the result line (CLI-PROGRAM-7).
+#
+#	A message that reports a fault takes the logger directly, at
+#	the warning level or the error level, and no run hides it.
+sub _note ( $ctx, $fmt, @args )
+{
+	my $cli = $ctx->{app}->cli;
+	$cli->log->info( $fmt, @args ) if $cli->option('verbose');
+
+	return;
+}
+
 # _trace($ctx, @cmd):
 #	Trace one command of the run. A dry run prints it to standard
 #	output, as the line that starts with '+ ' and holds each
@@ -1931,33 +1943,40 @@ sub _command ( $ctx, @cmd )
 #	oracle of CLI-CONFORMANCE-2, so the form of the line comes
 #	from the synced scripts/deps.
 #
-#	A real run prints no line, because standard output carries the
-#	result of the verb alone (CLI-PROGRAM-4). With --verbose the
-#	line goes to standard error, under the 'run:' lead that
-#	$app->command gives each child (CLI-PROGRAM-7).
+#	A real run prints no line to standard output, because standard
+#	output carries the result of the verb alone (CLI-PROGRAM-4).
+#	With --verbose the line goes to standard error, and this method
+#	writes it (CLI-PROGRAM-7).
 #
-#	A download of the verb runs in-process, and its line names the
-#	fetch verb (DEPS-FETCH-2). Such a line reaches this method, and
-#	never _command.
+#	A download of the verb runs in-process, so $app->command never
+#	sees it and traces nothing for it. The verbose branch here
+#	covers that download alone: _command hands every child to
+#	$app->command, which writes its own 'run: ' line.
+#
+#	That branch joins the words raw, as $app->command does, so one
+#	run writes one form. The quoted form belongs to the dry-run
+#	trace, whose reader is the oracle.
+#
+#	A download of the verb names the fetch verb in its line
+#	(DEPS-FETCH-2).
 sub _trace ( $ctx, @cmd )
 {
-	my $line = join q{ }, map { _quote($_) } @cmd;
 	if ( $ctx->{dry} ) {
-		say '+ ', $line;
+		say '+ ', join q{ }, map { _quote($_) } @cmd;
 		return;
 	}
 
-	$ctx->{app}->cli->log->info( 'run: %s', $line )
+	$ctx->{app}->cli->log->info( 'run: %s', join q{ }, @cmd )
 	    if $ctx->{app}->cli->option('verbose');
 
 	return;
 }
 
 # _quote($word):
-#	Shell-quote one word of the trace line. The program gives no
-#	word to a shell (CLI-PROGRAM-6). The quoting lets a reader of
-#	the trace, and the oracle test, see that an argument with a
-#	space is one argument.
+#	Shell-quote one word of the dry-run trace line. The program
+#	gives no word to a shell (CLI-PROGRAM-6). The quoting lets a
+#	reader of the trace, and the oracle test, see that an argument
+#	with a space is one argument.
 sub _quote ($word)
 {
 	return $word unless $word eq q{} || $word =~ /[^\w.\/:=-]/;

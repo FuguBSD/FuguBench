@@ -199,16 +199,25 @@ a dot, a solidus, a colon, an equals sign, and a dash alone. Every
 other word, and the empty word, takes single quotes.
 
 The program gives no word to a shell. The quoting lets a reader of
-the trace see that an argument with a space is one argument.
+the trace see that an argument with a space is one argument. It
+belongs to the dry-run trace, which the conformance test reads.
 
 The trace of a dry run is the standard output, and so is the result
-line of an install. Every progress line goes to the logger, which
-writes to standard error. No line of a child reaches the standard
-output.
+line of an install. No line of a child reaches the standard output.
 
 A run without C<--dry-run> prints no trace line, so its standard
-output holds the result line alone. C<--verbose> then traces each
-command on standard error.
+output holds the result line alone. Each progress line waits for
+C<--verbose>. A warning and an error report a fault, and no run hides
+one.
+
+C<--verbose> traces each command on standard error, and it adds the
+progress lines: the entry list of each type, the key that verified a
+signed manifest, the bootstrap of C<cpanm>, and the local library.
+
+A C<--verbose> trace line carries a C<< run: >> lead, and it joins
+the words of the command raw. One run writes one form, because a
+child command and an in-process download take the same lead and the
+same join.
 
 The verb downloads in-process, so the trace names the fetch verb:
 C<< fugubench fetch <file> <url> >>. Each download takes a temporary
