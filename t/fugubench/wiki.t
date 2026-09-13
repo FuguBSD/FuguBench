@@ -2,8 +2,8 @@
 # ex:ts=8 sw=4:
 # The port of the Workspace test t/ci/wiki.t (CLI-CONFORMANCE-1). It
 # tests the wiki verb (WIKI-OPEN, WIKI-PAGES, WIKI-CAPTURE,
-# WIKI-STATUS, WIKI-CONFINE). The hook subtest of the source waits
-# for the hook verb.
+# WIKI-STATUS, WIKI-CONFINE). The hook subtest of the source sits in
+# t/fugubench/hook.t, beside the hook verb.
 #
 # Each test makes a temp tree with a bare repository as the origin
 # and one or two checkouts that clone it. No test reaches the

@@ -32,6 +32,7 @@ use Fugu::Process;
 use Fugu::Sandbox;
 
 use App::FuguBench::Checkout;
+use App::FuguBench::Hook;
 use App::FuguBench::Traces;
 use App::FuguBench::Version;
 use App::FuguBench::Wiki;
@@ -55,6 +56,7 @@ use App::FuguBench::Worktree;
 # it. The module returns the entry of the Fugu::CLI table from its
 # command class method.
 my @VERBS = (
+	[ 'hook',     'App::FuguBench::Hook' ],
 	[ 'traces',   'App::FuguBench::Traces' ],
 	[ 'version',  'App::FuguBench::Version' ],
 	[ 'wiki',     'App::FuguBench::Wiki' ],
@@ -80,7 +82,15 @@ my @VERBS = (
 # unveils. The list comes from the verb, because a path of it comes
 # from an option and a path of it comes from the checkout. The two
 # other verbs that unveil are `shim` and `install` (CLI-SANDBOX-2).
+#
+# `hook` runs the other verbs in its own process, so its row pledges
+# the promises of `wiki` and of `worktree` together. Those verbs run
+# git, so the row unveils nothing. The verb reads the checkout of the
+# payload, so the row needs no early root.
 my %SANDBOX = (
+	hook => {
+		promises => 'stdio rpath wpath cpath fattr proc exec inet dns'
+	},
 	traces => {
 		promises => 'stdio rpath',
 		unveil   => sub ($app) {

@@ -154,6 +154,11 @@ unveils. The list comes from the verb, because a path of it comes
 from an option and a path of it comes from the checkout.
 L<App::FuguBench::Traces> holds the list and the reason of each path.
 
+C<hook> runs the other verbs in its own process, so its row pledges
+the promises of C<wiki> and of C<worktree> together. Those verbs run
+git, so the row unveils nothing. The verb reads the checkout of the
+payload, so the row needs no early root.
+
 =head1 RETURN VALUES
 
 C<new> returns a dispatcher. C<run> returns an exit code. C<cli>
@@ -169,9 +174,10 @@ C<child> returns a pid or C<undef>.
 
 =head1 SEE ALSO
 
-L<App::FuguBench::Checkout>, L<App::FuguBench::Traces>,
-L<App::FuguBench::Wiki>, L<App::FuguBench::Worktree>, L<Fugu::CLI>,
-L<Fugu::File>, L<Fugu::Log>, L<Fugu::Process>, L<Fugu::Sandbox>
+L<App::FuguBench::Checkout>, L<App::FuguBench::Hook>,
+L<App::FuguBench::Traces>, L<App::FuguBench::Wiki>,
+L<App::FuguBench::Worktree>, L<Fugu::CLI>, L<Fugu::File>,
+L<Fugu::Log>, L<Fugu::Process>, L<Fugu::Sandbox>
 
 =head1 AUTHORS
 

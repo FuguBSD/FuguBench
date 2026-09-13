@@ -49,6 +49,10 @@ design of the events comes from Workspace WS-HOOKS and Workspace LIB-HOOKS.
 - **HOOK-WORKTREE-2** — `WorktreeRemove` must remove nothing (D-06). It must
   read `worktree_path`, print the path and the manual command
   `make -C <root> worktree-remove NAME=<name>` to standard error, and exit zero.
+  It must split the path at the last `/<worktree.base>/` segment. The part in
+  front of the segment is the root, and the part after it is the name. The
+  `worktree.base` value comes from the checkout of the payload `cwd`. Without
+  that value, and without the segment, the verb must print the path alone.
 - **HOOK-WORKTREE-3** — Claude Code runs the create hook again when a session
   reconnects, with the same name. `WorktreeCreate` must exit 0 for that run, and
   WT-CREATE-7 gives the result.
