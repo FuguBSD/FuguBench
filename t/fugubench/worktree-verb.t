@@ -175,7 +175,37 @@ subtest 'create refuses a name of the wrong shape' => sub {
 	ok( !-e "$real/.claude/worktrees", 'a refusal makes no directory' );
 };
 
-subtest 'create refuses a directory, a branch, and a nest' => sub {
+subtest 'a second create repairs the bootstrap and reports the path' => sub {
+
+	# Claude Code runs the create hook again when a session
+	# reconnects, with the same name. That run must write the path
+	# and exit 0, or the session fails (WT-CREATE-7).
+	my ( $dir, $real ) = _repo('@echo run >> bootstrap.log');
+	my $wt = "$real/.claude/worktrees/again";
+
+	my $result = _run( $dir, 'create', 'again' );
+	is( $result->{exit_code}, 0, 'the first create exits 0' )
+	    or diag $result->{stderr};
+
+	$result = _run( $dir, 'create', 'again' );
+	is( $result->{exit_code}, 0, 'the second create exits 0' )
+	    or diag $result->{stderr};
+	is( $result->{stdout}, "$wt\n",
+		'the second create writes the path (WT-CREATE-7)' );
+
+	# Each clone step of a bootstrap skips what exists, so the
+	# second run repairs a bootstrap that stopped early.
+	is(
+		Fugu::File->read("$wt/bootstrap.log"),
+		"run\nrun\n",
+		'the second create runs the bootstrap again (WT-CREATE-7)'
+	);
+	ok( -d $wt, 'the worktree stays' );
+	is_deeply( [ _branches($dir) ],
+		[ 'again', 'main' ], 'the second create keeps the branch' );
+};
+
+subtest 'create refuses debris, a branch, and a nest' => sub {
 	my ( $dir, $real ) = _repo();
 	my $base = "$real/.claude/worktrees";
 
@@ -183,11 +213,17 @@ subtest 'create refuses a directory, a branch, and a nest' => sub {
 	# create. Only remove clears it (WT-CREATE-7).
 	make_path("$base/debris");
 	my $result = _run( $dir, 'create', 'debris' );
-	is( $result->{exit_code}, 1, 'create refuses a directory' );
+	is( $result->{exit_code}, 1, 'create refuses debris' );
+	is( $result->{stdout},    q{}, 'the refusal writes no path' );
 	like(
 		$result->{stderr},
-		qr/remove debris/,
-		'the message names the remedy'
+		qr/not a worktree of debris/,
+		'the message names the cause'
+	);
+	like(
+		$result->{stderr},
+		qr/fugubench worktree remove debris/,
+		'the message names the remove command as the remedy'
 	);
 	ok( !-e "$base/debris/.git", 'create makes no worktree in it' );
 	is_deeply( [ _branches($dir) ],

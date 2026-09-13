@@ -110,7 +110,7 @@ The differences from `worktree.pl` are the invocation,
 
 | Subcommand                | Result line                              | Exit codes                                                                                |
 | ------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `create <name>`           | The worktree path, as the only line      | 0; 1 a bad name, a nest, an existing directory, a failed step, a signal; 2; 3 a bad base  |
+| `create <name>`           | The worktree path, as the only line      | 0; 1 a bad name, a nest, debris, a failed step, a signal; 2; 3 a bad base                 |
 | `remove [--force] <name>` | None                                     | 0; 1 a bad name, a refusal, a path outside the base, a branch that stays; 2; 3 a bad base |
 | `list`                    | One line per worktree, or `no worktrees` | 0; 2; 3 a bad base                                                                        |
 | `clone <path>...`         | None                                     | 0; 1 a bad path, an unreadable source, a failed clone or copy; 2                          |
@@ -178,8 +178,9 @@ dirty nested clone.
 - `create` prints the path as the only line of standard output. The branch and
   the worktree exist, and a bootstrap target sees `MAIN=<root>`.
 - `create` refuses a name that starts with `-` or `.`, and a name with `..`. It
-  refuses an existing directory, an existing branch, and a name inside an
-  existing worktree. Each refusal leaves no branch and no directory.
+  refuses a directory that git does not know, an existing branch, and a name
+  inside an existing worktree. Each refusal leaves no branch and no directory. A
+  second create of an existing worktree repairs the bootstrap and exits 0.
 - A failed bootstrap and a SIGTERM during a bootstrap each leave no worktree, no
   branch, and no empty parent. After the signal, the child of the bootstrap is
   gone.

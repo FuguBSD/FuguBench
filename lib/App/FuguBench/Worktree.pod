@@ -42,8 +42,18 @@ the WorktreeCreate hook.
 A name holds letters, digits, a dot, a dash, an underscore, and a
 slash. The first character is a letter or a digit, because a name
 that starts with a dash reaches git as an option. A name holds no
-C<..> segment. The verb refuses a name whose directory exists, and a
-name whose worktree would sit inside an existing worktree.
+C<..> segment. The verb refuses a name whose worktree would sit
+inside an existing worktree.
+
+A second C<create> of a name whose worktree exists runs the bootstrap
+again, writes the path again, and returns 0. Claude Code runs the
+WorktreeCreate hook again when a session reconnects, and that run
+must not fail. Each clone step of the bootstrap skips what exists, so
+the run repairs a bootstrap that stopped early.
+
+A path that exists, but that is no worktree of that name, is debris
+from a killed create. The verb refuses it, and the message names
+C<< <program> worktree remove <name> >> as the remedy.
 
 The verb makes the branch first, as its own step. That step is the
 lock against a parallel create of one name: one create is successful,
@@ -91,8 +101,8 @@ The verb returns the exit codes of L<Fugu::CLI>. A subcommand that
 does its work returns 0.
 
 It returns 1 after a failure: a root that is no main checkout, a name
-of the wrong shape, a nest, a directory that exists, a step that
-fails, or a signal.
+of the wrong shape, a nest, a path that is no worktree of the name, a
+step that fails, or a signal.
 
 A missing argument, an extra argument, and an unknown subcommand give
 the usage error and return 2. A C<worktree.base> value of the wrong

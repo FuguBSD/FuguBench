@@ -46,6 +46,10 @@ use Fugu::Process;
 # lock against a parallel create of one name. After that step the
 # verb owns all that it makes, so a failure and a signal both run
 # one cleanup.
+#
+# A second create of a name whose worktree exists runs the bootstrap
+# again and writes the path again. Claude Code runs the create hook
+# again when a session reconnects, and that run must not fail.
 
 # The subcommands of this change. An unknown word gives the usage
 # error, and a subcommand of a later change is an unknown word.
@@ -135,6 +139,9 @@ sub _setup ($app)
 #	The branch step comes first, and the cleanup starts after it.
 #	A failure and a signal then remove all that the verb made: the
 #	worktree, the branch, and each empty parent directory.
+#
+#	A name whose worktree exists goes to _again, which repeats the
+#	bootstrap and the path line (WT-CREATE-7).
 sub _create ( $app, @argv )
 {
 	return $app->cli->command_usage_error('worktree') if @argv != 1;
@@ -150,11 +157,7 @@ sub _create ( $app, @argv )
 	}
 
 	my $wt = File::Spec->catdir( $base, $name );
-	if ( -e $wt ) {
-		$log->error( 'already exists: %s',         $wt );
-		$log->error( 'remove %s to make it again', $name );
-		return EXIT_ERROR;
-	}
+	return _again( $app, $root, $name, $wt ) if -e $wt;
 	return EXIT_ERROR unless _outside( $app, $base, $name, $wt );
 
 	# The branch step is the lock against a parallel create of one
@@ -199,6 +202,44 @@ sub _create ( $app, @argv )
 		$log->error( 'the bootstrap of %s failed: %s',
 			$wt, $app->error );
 		$cleanup->();
+		return EXIT_ERROR;
+	}
+
+	say $wt;
+
+	return EXIT_SUCCESS;
+}
+
+# _again($app, $root, $name, $wt):
+#	The result of a second create of one name (WT-CREATE-7). A
+#	session that reconnects runs the create hook again with the
+#	same name, and that run must not fail. So the method runs the
+#	bootstrap again and writes the path again. Each clone step of
+#	the bootstrap skips what exists, so the run repairs a bootstrap
+#	that stopped early.
+#
+#	A path that is no worktree of the name is debris from a killed
+#	create, and only remove clears it. The cleanup of _create must
+#	not run here, because the worktree belongs to the create before
+#	this one.
+sub _again ( $app, $root, $name, $wt )
+{
+	my $log = $app->cli->log;
+	my $branch =
+	    -e "$wt/.git"
+	    ? _capture( $app, 'git', '-C', $wt, 'branch', '--show-current' )
+	    : undef;
+	unless ( defined $branch && $branch eq $name ) {
+		$log->error( 'already exists, not a worktree of %s: %s',
+			$name, $wt );
+		$log->error( 'remove it with: %s worktree remove %s',
+			$app->cli->name, $name );
+		return EXIT_ERROR;
+	}
+
+	unless ( _bootstrap( $app, $root, $wt ) ) {
+		$log->error( 'the bootstrap of %s failed: %s',
+			$wt, $app->error );
 		return EXIT_ERROR;
 	}
 
