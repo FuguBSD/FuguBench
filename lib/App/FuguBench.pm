@@ -33,6 +33,7 @@ use Fugu::Sandbox;
 
 use App::FuguBench::Checkout;
 use App::FuguBench::Version;
+use App::FuguBench::Wiki;
 use App::FuguBench::Worktree;
 
 # App::FuguBench - the dispatcher of the fugubench program.
@@ -54,6 +55,7 @@ use App::FuguBench::Worktree;
 # command class method.
 my @VERBS = (
 	[ 'version',  'App::FuguBench::Version' ],
+	[ 'wiki',     'App::FuguBench::Wiki' ],
 	[ 'worktree', 'App::FuguBench::Worktree' ],
 );
 
@@ -63,14 +65,20 @@ my @VERBS = (
 # promises of the row to every other one.
 #
 # `version` opens no file, so its row holds `stdio` alone, and
-# `stdio` denies open(2). The first verb that opens a file adds the
-# unveil of CLI-SANDBOX-2, and the paths of its row.
+# `stdio` denies open(2). The three verbs that unveil are `shim`,
+# `install`, and `traces` (CLI-SANDBOX-2). No row of this table
+# unveils a path.
 #
-# `worktree` runs git and make, and no row can name each file that
-# they open. So the row unveils nothing (CLI-SANDBOX-2). Its `list`
-# subcommand writes no file, so it drops the write promises.
+# `wiki` and `worktree` run git, and no row can name each file that
+# git opens. So each row unveils nothing (CLI-SANDBOX-2). git pushes,
+# so the row of `wiki` adds the network promises. The `list`
+# subcommand of `worktree` writes no file, so it drops the write
+# promises.
 my %SANDBOX = (
-	version  => { promises => 'stdio' },
+	version => { promises => 'stdio' },
+	wiki    => {
+		promises => 'stdio rpath wpath cpath fattr proc exec inet dns'
+	},
 	worktree => {
 		promises    => 'stdio rpath wpath cpath fattr proc exec',
 		subcommands => { list => 'stdio rpath proc exec' },

@@ -116,7 +116,11 @@ starts a comment.
   is a relative path with no `..` segment, and a URL holds a scheme. The
   `worktree.base` value must name a directory below the root, so a value of `.`
   is an error. A base that is the root itself holds every path of the checkout,
-  and the containment guard of `worktree remove` then admits each one.
+  and the containment guard of `worktree remove` then admits each one. The
+  `wiki.dir` value must name a directory below the home of `wiki.origin`, so a
+  value of `.` is an error. That value makes the checkout itself the library.
+  `wiki open` then writes a session page into the checkout, and it pushes the
+  page to the origin of the checkout.
 
 <a id="cli-fugu"></a>
 

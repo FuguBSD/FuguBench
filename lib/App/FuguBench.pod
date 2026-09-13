@@ -130,10 +130,11 @@ one.
 C<version> opens no file, so its row holds C<stdio> alone. C<stdio>
 denies open(2), and the row names no C<rpath>.
 
-C<worktree> runs git and make, and no row can name each file that a
-child opens. So the row unveils nothing. Its C<list> subcommand writes
-no file, so that subcommand drops the write promises. No row of this
-distribution unveils a path.
+C<wiki> and C<worktree> run git, and no row can name each file that a
+child opens. So each row unveils nothing. git pushes, so the row of
+C<wiki> adds the network promises. The C<list> subcommand of
+C<worktree> writes no file, so that subcommand drops the write
+promises. No row of this distribution unveils a path.
 
 =head1 RETURN VALUES
 
@@ -150,9 +151,9 @@ C<child> returns a pid or C<undef>.
 
 =head1 SEE ALSO
 
-L<App::FuguBench::Checkout>, L<App::FuguBench::Worktree>,
-L<Fugu::CLI>, L<Fugu::File>, L<Fugu::Log>, L<Fugu::Process>,
-L<Fugu::Sandbox>
+L<App::FuguBench::Checkout>, L<App::FuguBench::Wiki>,
+L<App::FuguBench::Worktree>, L<Fugu::CLI>, L<Fugu::File>,
+L<Fugu::Log>, L<Fugu::Process>, L<Fugu::Sandbox>
 
 =head1 AUTHORS
 
