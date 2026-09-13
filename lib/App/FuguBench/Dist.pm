@@ -108,6 +108,11 @@ sub shim_paths ( $, $ )
 #	verb reads the running file and writes the copy, so the row
 #	adds the install directory.
 #
+#	The install directory holds the running file after an
+#	install, and then one entry names both. unveil(2) returns
+#	EPERM on a second entry that widens a path, so the wider
+#	entry replaces the other one.
+#
 #	The row makes that directory. unveil(2) hides every path that
 #	the list leaves out, and the list can name the install
 #	directory alone, so a mkdir under the parent would fail after
@@ -119,6 +124,13 @@ sub install_paths ( $, $ )
 
 	my $dir = _install_dir();
 	return @paths unless defined $dir && Fugu::File->ensure_dir($dir);
+
+	# The comparison resolves each path, because HOME can hold a
+	# symlink and the entry of the running file holds the resolved
+	# form. 'rwc' reads as well, so the wider entry loses nothing.
+	my $same = Cwd::abs_path($dir) // $dir;
+	@paths =
+	    grep { ( Cwd::abs_path( $_->[0] ) // $_->[0] ) ne $same } @paths;
 
 	push @paths, [ $dir, 'rwc' ];
 
@@ -197,10 +209,24 @@ sub _shim ( $app, @argv )
 	my $cli = $app->cli;
 	return $cli->command_usage_error('shim') if @argv;
 
-	my $version = App::FuguBench->VERSION;
+	# The stamp itself, and not the VERSION method. That method
+	# parses the value: it truncates a value with a space, and it
+	# dies on a value with a letter. The check below is the gate,
+	# and it reports every value that it refuses.
+	my $version = $App::FuguBench::VERSION;
 	if ( !defined $version || $version eq NO_STAMP ) {
 		$cli->log->error( 'no release stamped this file: run shim'
 			    . ' on the packed file of a release' );
+		return EXIT_ERROR;
+	}
+
+	# The verb writes the version into shell text, so the value
+	# takes a shape check here. scripts/dist holds a build to the
+	# same shape, and a value with a space or a semicolon would
+	# write broken or injected shell.
+	if ( $version !~ /\A[0-9]+(?:\.[0-9]+)+\z/a ) {
+		$cli->log->error( 'the version %s is no dotted-decimal number',
+			$version );
 		return EXIT_ERROR;
 	}
 
@@ -219,24 +245,26 @@ version=@VERSION@
 url=@URL@
 want=@SUM@
 
-if [ -n "${FUGUBENCH:-}" ]; then
+if [ -x "${FUGUBENCH:-}" ]; then
 	exec "$FUGUBENCH" "$@"
 fi
 
 dir=$HOME/.cache/fugubench/$version
 file=$dir/fugubench
 if [ ! -x "$file" ]; then
+	# A value of the environment must never pass for a tool.
+	get= sum= got=
 	for c in curl wget ftp; do
 		if command -v "$c" >/dev/null 2>&1; then get=$c; break; fi
 	done
 	for c in sha256 shasum sha256sum; do
 		if command -v "$c" >/dev/null 2>&1; then sum=$c; break; fi
 	done
-	if [ -z "${get:-}" ]; then
+	if [ -z "$get" ]; then
 		echo "fugubench: install curl, wget or ftp" >&2
 		exit 1
 	fi
-	if [ -z "${sum:-}" ]; then
+	if [ -z "$sum" ]; then
 		echo "fugubench: install sha256, shasum or sha256sum" >&2
 		exit 1
 	fi

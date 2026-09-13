@@ -25,6 +25,8 @@ use Test::More;
 use Cwd            ();
 use Digest::SHA    ();
 use File::Basename ();
+use File::Copy     qw(copy);
+use File::Path     qw(make_path);
 use File::Spec     ();
 use File::Temp     qw(tempdir);
 use FindBin        qw($RealBin);
@@ -51,24 +53,38 @@ my $VERSION = '9.9.9';
 # compile, and perl exits 2, which is the usage code of the program.
 my %LIB = defined $ENV{PERL5LIB} ? ( PERL5LIB => $ENV{PERL5LIB} ) : ();
 
-# The directory of the running perl. The packed file starts with
-# `#!/usr/bin/env perl`, so the PATH of a shim run must name a perl.
-my $PERLDIR = File::Basename::dirname( Cwd::abs_path($^X) // $^X );
+# The perl of the suite, and its directory. The packed file starts
+# with `#!/usr/bin/env perl`, so the PATH of a shim run must name a
+# perl.
+my $PERL    = Cwd::abs_path($^X) // $^X;
+my $PERLDIR = File::Basename::dirname($PERL);
 
 # The stub downloader. It serves one file, and it records each call,
 # so a case reads how many times the shim reached for the network.
+# curl and ftp take -o, and wget takes -O.
 my $STUB = <<'STUB';
 #!/bin/sh
-echo "curl $*" >> '%s'
+echo "$0 $*" >> '%s'
 out=
 while [ $# -gt 0 ]; do
 	case $1 in
-	-o)	out=$2; shift 2 ;;
+	-o|-O)	out=$2; shift 2 ;;
 	*)	shift ;;
 	esac
 done
 cat '%s' > "$out"
 STUB
+
+# The stub digest tool. It digests the file that the shim names, so
+# no fixed value passes for a digest. `sha256 -q` prints the digest
+# alone, and `sha256sum` prints the file name after it.
+my $SUM = <<'SUM';
+#!/bin/sh
+exec '%s' -MDigest::SHA -e '
+	my $f = $ARGV[-1];
+	print Digest::SHA->new(256)->addfile($f)->hexdigest, %s, "\n";
+' -- "$@"
+SUM
 
 # _read($path):
 #	The whole text of one file.
@@ -135,6 +151,38 @@ sub _mode ($path)
 sub _env (%extra)
 {
 	return { PATH => $ENV{PATH} // '/usr/bin:/bin', %extra };
+}
+
+# _which($name):
+#	The path of one tool of the PATH of the operator, or undef.
+sub _which ($name)
+{
+	for my $dir ( split /:/, ( $ENV{PATH} // '/usr/bin:/bin' ), -1 ) {
+		next unless length $dir;
+		my $path = File::Spec->catfile( $dir, $name );
+		return $path if -f $path && -x $path;
+	}
+
+	return;
+}
+
+# _tools($dir):
+#	Link the tools that the shim runs into one directory, and the
+#	perl of the suite beside them. A case then holds PATH to that
+#	directory alone, so the shim finds the stub of the case and no
+#	downloader and no digest tool of the host.
+sub _tools ($dir)
+{
+	for my $name (qw(cat chmod mkdir mv rm)) {
+		my $path = _which($name) or do {
+			fail("the host holds $name");
+			next;
+		};
+		symlink $path, "$dir/$name" or die "symlink $name: $!\n";
+	}
+	symlink $PERL, "$dir/perl" or die "symlink perl: $!\n";
+
+	return $dir;
 }
 
 # _pack():
@@ -347,6 +395,21 @@ subtest 'a file that no release stamped pins nothing' => sub {
 	);
 };
 
+subtest 'a version of another shape writes no shell' => sub {
+
+	# The verb writes the version into shell text, so a value with
+	# a space or a semicolon must stop it (DIST-SHIM-1).
+	for my $bad ( '1.0.0; echo pwned', '1.0 0', 'HEAD' ) {
+		my $r = _stamped( $bad, 'shim' );
+		is( $r->{exit_code}, 1, "the shim of '$bad' exits 1" );
+		is( $r->{stdout}, q{}, 'and it prints no shim' );
+		like(
+			$r->{stderr}, qr/no dotted-decimal number/,
+			'and the message names the shape'
+		);
+	}
+};
+
 subtest 'the shim fetches, verifies, caches, and runs' => sub {
 	my $home = tempdir( CLEANUP => 1 );
 	my $bin  = tempdir( CLEANUP => 1 );
@@ -421,6 +484,15 @@ subtest 'FUGUBENCH replaces the download' => sub {
 	is( $r->{stdout},    $line, 'and it runs the named file' );
 	ok( !-e $log, 'and it reaches no downloader' );
 	ok( !-e "$home/.cache", 'and it writes no cache' );
+
+	# DIST-SHIM-2 conditions on an executable. A value that names
+	# none leaves the shim on the path of the release.
+	my $plain = _write( "$home/plain", "not a program\n" );
+	my $p     = _shell( $home, $bin, $shim,
+		argv => ['version'], FUGUBENCH => $plain );
+	is( $p->{exit_code}, 0, 'a value that names no executable exits 0' );
+	is( $p->{stdout},    $line, 'and the shim runs the release' );
+	ok( -f $log, 'and it reaches the downloader' );
 };
 
 subtest 'the shim names the downloaders that it wants' => sub {
@@ -442,6 +514,108 @@ subtest 'the shim names the downloaders that it wants' => sub {
 	like( $r->{stderr}, qr/wget/,  'and wget' );
 	like( $r->{stderr}, qr/\bftp/, 'and ftp' );
 	ok( !-e "$home/.cache", 'and the shim makes no cache directory' );
+
+	# A value of the environment must pass for no tool. The shim
+	# resets each variable of its selection, so this run reports
+	# the absent downloader as the run above does (DIST-SHIM-3).
+	my $j = Fugu::Process->run(
+		cmd => [ '/bin/sh', $shim, 'version' ],
+		cwd => $home,
+		env => {
+			PATH => $bin,
+			HOME => $home,
+			get  => 'curl',
+			sum  => 'shasum',
+			got  => 'nothing',
+		},
+	);
+	die "cannot run /bin/sh: $j->{error}\n" if defined $j->{error};
+
+	isnt( $j->{exit_code}, 0, 'an inherited get exits non-zero as well' );
+	like(
+		$j->{stderr}, qr/install curl, wget or ftp/,
+		'and the message names the three downloaders'
+	);
+	ok( !-e "$home/.cache", 'and the shim makes no cache directory' );
+};
+
+subtest 'the shim takes each downloader and each digest tool' => sub {
+
+	# The curl and shasum pair runs above. These two runs cover the
+	# four other branches of DIST-SHIM-3, and the second pair is
+	# the pair that OpenBSD selects. PATH holds the stub directory
+	# alone, so no tool of the host takes a branch.
+	my %tail = ( sha256 => 'q{}', sha256sum => '"  $f"' );
+
+	for my $pair ( [ 'wget', 'sha256sum' ], [ 'ftp', 'sha256' ] ) {
+		my ( $get, $sum ) = @$pair;
+
+		my $home = tempdir( CLEANUP => 1 );
+		my $bin  = tempdir( CLEANUP => 1 );
+		_tools($bin);
+
+		my $log = "$bin/calls";
+		_write( "$bin/$get", sprintf $STUB, $log, $packed );
+		_write( "$bin/$sum", sprintf $SUM, $PERL, $tail{$sum} );
+		chmod 0755, "$bin/$get", "$bin/$sum" or die "chmod: $!";
+
+		my $shim = _write( "$home/fugubench.sh", $text );
+		my $r    = Fugu::Process->run(
+			cmd => [ '/bin/sh', $shim, 'version' ],
+			cwd => $home,
+			env => { PATH => $bin, HOME => $home },
+		);
+		die "cannot run /bin/sh: $r->{error}\n" if defined $r->{error};
+
+		is( $r->{exit_code}, 0, "the $get and $sum run exits 0" )
+		    or diag $r->{stderr};
+		is( $r->{stdout}, $line, "and $get served the packed file" );
+
+		my $file = "$home/.cache/fugubench/$VERSION/fugubench";
+		ok( -f $file, "and the shim cached the file of $get" ) or next;
+		is( _sha256($file), $digest, "and $sum held it to the digest" );
+	}
+};
+
+subtest 'an inherited variable passes for no digest tool' => sub {
+
+	# Without the reset of DIST-SHIM-3 an inherited `got` that
+	# holds the expected digest installs and runs an unverified
+	# download. The stub directory holds no digest tool, so the
+	# shim must name the three commands and stop.
+	my $home = tempdir( CLEANUP => 1 );
+	my $bin  = tempdir( CLEANUP => 1 );
+	_tools($bin);
+
+	# The stub serves other bytes, and that file prints a word
+	# that no run of the packed file prints.
+	my $other = _write( "$home/other", "#!/bin/sh\necho unverified\n" );
+	my $log   = "$bin/calls";
+	_write( "$bin/curl", sprintf $STUB, $log, $other );
+	chmod 0755, "$bin/curl" or die "chmod: $!";
+
+	my $shim = _write( "$home/fugubench.sh", $text );
+	my $r    = Fugu::Process->run(
+		cmd => [ '/bin/sh', $shim, 'version' ],
+		cwd => $home,
+		env => {
+			PATH => $bin,
+			HOME => $home,
+			sum  => 'nosuchsum',
+			got  => $digest,
+		},
+	);
+	die "cannot run /bin/sh: $r->{error}\n" if defined $r->{error};
+
+	isnt( $r->{exit_code}, 0, 'the shim exits non-zero' );
+	like(
+		$r->{stderr}, qr/install sha256, shasum or sha256sum/,
+		'and the message names the three digest tools'
+	);
+	is( $r->{stdout}, q{}, 'and no download runs' );
+	ok( !-e $log, 'and the shim reaches no downloader' );
+	is_deeply( [ _entries("$home/.cache/fugubench/$VERSION") ],
+		[], 'and it caches nothing' );
 };
 
 subtest 'install copies the running file' => sub {
@@ -520,6 +694,31 @@ subtest 'the install script fetches the pack and installs it' => sub {
 	);
 };
 
+subtest 'a build that no release holds writes no install script' => sub {
+
+	# A build of a tree with no tag carries 0.0.0, and no release
+	# holds it. The shim of such a pack pins nothing, so the packer
+	# writes the packed file alone (DIST-INSTALL-1).
+	my $dir = tempdir( CLEANUP => 1 );
+	my $r   = Fugu::Process->run(
+		cmd => [
+			$^X, 'scripts/pack', '--version', '0.0.0',
+			'--out', $dir
+		],
+		cwd => $root,
+		env => _env( HOME => $dir, %LIB ),
+	);
+	die "cannot run scripts/pack: $r->{error}\n" if defined $r->{error};
+
+	is( $r->{exit_code}, 0, 'the build exits 0' ) or diag $r->{stderr};
+	ok( -f "$dir/fugubench",   'and it writes the packed file' );
+	ok( !-e "$dir/install.sh", 'and it writes no install script' );
+	like(
+		$r->{stderr}, qr/writes no install\.sh/,
+		'and it reports the reason'
+	);
+};
+
 subtest 'the two sandbox rows' => sub {
 	my @lib = map { [ $_, 'r', { optional => 1 } ] }
 	    Fugu::Sandbox->perl_lib_dirs;
@@ -565,6 +764,35 @@ subtest 'the two sandbox rows' => sub {
 		_sha256( Cwd::abs_path($0) ),
 		'and it copies the running file'
 	);
+};
+
+subtest 'the install row names one directory once' => sub {
+
+	# The install directory holds the running file after an
+	# install. unveil(2) returns EPERM on a second entry that
+	# widens a path, so the row must name that directory once
+	# (CLI-SANDBOX-2).
+	my @lib = map { [ $_, 'r', { optional => 1 } ] }
+	    Fugu::Sandbox->perl_lib_dirs;
+
+	my $home = tempdir( CLEANUP => 1 );
+	my $dir  = "$home/.local/bin";
+	make_path($dir) or die "cannot make $dir: $!\n";
+
+	my $running = "$dir/fugubench";
+	copy( $0, $running ) or die "cannot copy $0: $!\n";
+
+	local $ENV{HOME} = $home;
+	local $0         = $running;
+
+	my $i = _entered('install');
+	is( $i->{code}, 0, 'install exits 0' ) or diag $i->{out};
+	is_deeply(
+		$i->{paths},
+		[ @lib, [ $dir, 'rwc' ] ],
+		'the row holds one entry for the install directory'
+	);
+	is( $i->{out}, "$running\n", 'and the verb prints the path' );
 };
 
 done_testing();
