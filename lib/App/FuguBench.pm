@@ -23,14 +23,17 @@ use experimental 'signatures';
 no feature qw(indirect multidimensional bareword_filehandles);
 
 use Cwd          ();
+use File::Temp   ();
 use Getopt::Long ();
 
 use Fugu::CLI;
+use Fugu::File;
 use Fugu::Process;
 use Fugu::Sandbox;
 
 use App::FuguBench::Checkout;
 use App::FuguBench::Version;
+use App::FuguBench::Worktree;
 
 # App::FuguBench - the dispatcher of the fugubench program.
 #
@@ -49,15 +52,30 @@ use App::FuguBench::Version;
 # The verb table. Each entry names a verb and the module that holds
 # it. The module returns the entry of the Fugu::CLI table from its
 # command class method.
-my @VERBS = ( [ 'version', 'App::FuguBench::Version' ], );
+my @VERBS = (
+	[ 'version',  'App::FuguBench::Version' ],
+	[ 'worktree', 'App::FuguBench::Worktree' ],
+);
 
 # The sandbox row of each verb (CLI-SANDBOX). A row names the pledge
-# promises of the verb, and it names nothing else.
+# promises of the verb, and it names nothing else. A row that names
+# subcommands gives one promise set to each named subcommand, and the
+# promises of the row to every other one.
 #
 # `version` opens no file, so its row holds `stdio` alone, and
 # `stdio` denies open(2). The first verb that opens a file adds the
 # unveil of CLI-SANDBOX-2, and the paths of its row.
-my %SANDBOX = ( version => { promises => 'stdio' }, );
+#
+# `worktree` runs git and make, and no row can name each file that
+# they open. So the row unveils nothing (CLI-SANDBOX-2). Its `list`
+# subcommand writes no file, so it drops the write promises.
+my %SANDBOX = (
+	version  => { promises => 'stdio' },
+	worktree => {
+		promises    => 'stdio rpath wpath cpath fattr proc exec',
+		subcommands => { list => 'stdio rpath proc exec' },
+	},
+);
 
 # The global options, in the form of Fugu::CLI. new gives the table
 # to the dispatcher, and run reads the same table to find the verb.
@@ -74,6 +92,7 @@ sub new ($class)
 	my $self = bless {
 		cli      => undef,
 		checkout => undef,
+		child    => undef,
 		error    => undef,
 	}, $class;
 
@@ -101,7 +120,7 @@ sub _commands ($self)
 		my $entry = $module->command($name);
 		my $body  = $entry->{run};
 		$entry->{run} = sub ( $, @argv ) {
-			$self->_sandbox($name);
+			$self->_sandbox( $name, $argv[0] );
 			return $body->( $self, @argv );
 		};
 		$table{$name} = $entry;
@@ -110,15 +129,20 @@ sub _commands ($self)
 	return \%table;
 }
 
-# $self->_sandbox($verb):
+# $self->_sandbox($verb, $subcommand):
 #	Enter the sandbox row of one verb. The method pledges the
-#	promises of the row. On a platform other than OpenBSD the
-#	call changes nothing.
-sub _sandbox ( $self, $verb )
+#	promises of the row, or the promises that the row gives to the
+#	subcommand. On a platform other than OpenBSD the call changes
+#	nothing.
+sub _sandbox ( $self, $verb, $subcommand = undef )
 {
-	my $row = $SANDBOX{$verb};
+	my $row      = $SANDBOX{$verb};
+	my $named    = $row->{subcommands} // {};
+	my $promises = $row->{promises};
+	$promises = $named->{$subcommand}
+	    if defined $subcommand && defined $named->{$subcommand};
 
-	Fugu::Sandbox->pledge( promises => $row->{promises} );
+	Fugu::Sandbox->pledge( promises => $promises );
 
 	return $self;
 }
@@ -173,6 +197,15 @@ sub error ($self)
 	return $self->{error};
 }
 
+# $self->child:
+#	The pid of the running child of the group form of command(),
+#	or undef. A signal handler reads it to stop the group before
+#	it starts its cleanup.
+sub child ($self)
+{
+	return $self->{child};
+}
+
 # $self->checkout($checkout):
 #	The checkout of the run. Without an argument the walk runs on
 #	the first call, from the -C value or from the current
@@ -214,6 +247,10 @@ sub checkout ( $self, $checkout = undef )
 #	It returns the captured standard output, and undef with the
 #	reason in error(). A child that writes nothing gives the empty
 #	string, so a caller tests the return value with defined.
+#
+#	With group => 1 the child leads its own session, and the
+#	method keeps its pid in child() while it waits. _group holds
+#	that form.
 sub command ( $self, $cmd, %args )
 {
 	my $log = $self->{cli}->log;
@@ -221,6 +258,8 @@ sub command ( $self, $cmd, %args )
 
 	$log->info( 'run: %s', join q{ }, @$cmd )
 	    if $self->{cli}->option('verbose');
+
+	return $self->_group( $cmd, %args ) if delete $args{group};
 
 	my $result = Fugu::Process->run( cmd => $cmd, %args );
 	if ( defined $result->{error} ) {
@@ -239,6 +278,56 @@ sub command ( $self, $cmd, %args )
 	}
 
 	return $result->{stdout};
+}
+
+# $self->_group($cmd, %args):
+#	The group form of command(). Fugu::Process->spawn_command
+#	starts the child with daemonize, so the child leads its own
+#	session and its own process group. The pid stays in child()
+#	while the parent waits, so a signal handler stops the whole
+#	tree with Fugu::Process->terminate.
+#
+#	spawn_command opens each stream by its path, and two opens of
+#	one path truncate that file twice. So the child writes its two
+#	streams to two files of one temporary directory. The method
+#	writes both files to standard error after the exit, because a
+#	child writes no part of the result (CLI-PROGRAM-4).
+sub _group ( $self, $cmd, %args )
+{
+	my $dir = File::Temp->newdir(
+		TEMPLATE => 'fugubench-XXXXXXXX',
+		TMPDIR   => 1
+	);
+	my @files = ( "$dir/stdout", "$dir/stderr" );
+
+	my $result = Fugu::Process->spawn_command(
+		cmd       => $cmd,
+		daemonize => 1,
+		stdout    => $files[0],
+		stderr    => $files[1],
+		%args
+	);
+	unless ( $result->{success} ) {
+		$self->{error} = $result->{error};
+		return;
+	}
+
+	$self->{child} = $result->{pid};
+	waitpid $result->{pid}, 0;
+	my $code = Fugu::Process->exit_code($?);
+	$self->{child} = undef;
+
+	for my $file (@files) {
+		my $text = Fugu::File->read($file);
+		print STDERR $text if defined $text && length $text;
+	}
+
+	unless ( $code == 0 ) {
+		$self->{error} = "$cmd->[0] exited $code";
+		return;
+	}
+
+	return q{};
 }
 
 1;

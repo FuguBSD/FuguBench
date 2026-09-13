@@ -12,10 +12,11 @@ comes from Workspace WS-WORKTREE and Workspace WS-BOOTSTRAP.
   `<root>/<worktree.base>/<name>`, on a new branch `<name>` that starts at the
   local HEAD of the main checkout.
 - **WT-CREATE-2** — A name must hold letters, digits, a dot, a dash, an
-  underscore, and a slash, and no `..` segment. The verb must refuse a name
-  whose worktree would sit inside an existing worktree. The removal of the outer
-  worktree destroys the inner one. Two worktrees under one plain parent
-  directory are permitted.
+  underscore, and a slash, and no `..` segment. The first character must be a
+  letter or a digit. A name that starts with a dash reaches git as an option.
+  The verb must refuse a name whose worktree would sit inside an existing
+  worktree. The removal of the outer worktree destroys the inner one. Two
+  worktrees under one plain parent directory are permitted.
 - **WT-CREATE-3** — The verb must make the branch first, as its own step, with
   `git branch`. That step is the lock against a parallel create of one name: one
   create is successful, and the others stop and change nothing.
@@ -63,9 +64,11 @@ comes from Workspace WS-WORKTREE and Workspace WS-BOOTSTRAP.
 ## List
 
 - **WT-LIST-1** — `worktree list` must report each worktree with its name, its
-  age in days, and its state. The state is `clean`, or each cause of
-  WT-REMOVE-2. The age comes from the `.git` file of the worktree, which records
-  the creation and which later work leaves alone.
+  age in days, and its state. The line must be `%-40s %4s d  %s`: the name, the
+  age, and the state. The state is `clean`, or each cause of WT-REMOVE-2. The
+  age comes from the `.git` file of the worktree, which records the creation and
+  which later work leaves alone. A `.git` file that no read reaches gives the
+  age `?`.
 - **WT-LIST-2** — Without a worktree, the verb must print `no worktrees`.
 
 <a id="wt-clone"></a>

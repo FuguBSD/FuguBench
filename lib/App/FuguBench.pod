@@ -82,6 +82,24 @@ The method writes the command line to standard error under
 C<--verbose>, before the child runs. After the child exits, it writes
 the captured standard error of the child to standard error, in full.
 
+C<command(\@cmd, group =E<gt> 1)> runs the child as the leader of its
+own session, so the child leads its own process group too. The
+method keeps the pid of the child in C<child> while it waits. After
+the exit it writes the output of the child to standard error, and it
+returns as the plain form does. A verb that must stop a whole process
+tree uses this form.
+
+The two streams of that child arrive on two files of one temporary
+directory, because the start opens each stream by its path. One path
+for both streams would truncate the file twice.
+
+=head2 child
+
+C<child> returns the pid of the running child of the group form, or
+C<undef>. A signal handler reads it, and it stops the group with
+C<< Fugu::Process->terminate($app->child, group =E<gt> 1) >> before
+the handler starts its cleanup.
+
 =head2 error
 
 C<error> returns the reason of the last failure of C<command>, or
@@ -94,9 +112,17 @@ names the pledge promises of the verb, and it names nothing else. The
 dispatcher pledges the row of the verb before the body runs. On a
 platform other than OpenBSD the call changes nothing.
 
+A row can name subcommands. The dispatcher then pledges the promises
+of the named subcommand, and the promises of the row for every other
+one.
+
 C<version> opens no file, so its row holds C<stdio> alone. C<stdio>
-denies open(2), and the row names no C<rpath>. This distribution holds
-that one verb, so no row unveils a path.
+denies open(2), and the row names no C<rpath>.
+
+C<worktree> runs git and make, and no row can name each file that a
+child opens. So the row unveils nothing. Its C<list> subcommand writes
+no file, so that subcommand drops the write promises. No row of this
+distribution unveils a path.
 
 =head1 RETURN VALUES
 
@@ -107,12 +133,15 @@ or C<undef>.
 C<command> returns the captured standard output of the child, and
 C<undef> with the reason in C<error>. A child that writes nothing
 gives the empty string, so a caller tests the return value with
-C<defined>.
+C<defined>. The group form writes every stream of the child to
+standard error, so it gives the empty string after a successful run.
+C<child> returns a pid or C<undef>.
 
 =head1 SEE ALSO
 
-L<App::FuguBench::Checkout>, L<Fugu::CLI>, L<Fugu::Log>,
-L<Fugu::Process>, L<Fugu::Sandbox>
+L<App::FuguBench::Checkout>, L<App::FuguBench::Worktree>,
+L<Fugu::CLI>, L<Fugu::File>, L<Fugu::Log>, L<Fugu::Process>,
+L<Fugu::Sandbox>
 
 =head1 AUTHORS
 

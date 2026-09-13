@@ -1,0 +1,345 @@
+#!/usr/bin/env perl
+# ex:ts=8 sw=4:
+# The create and the list subcommands of the worktree verb
+# (WT-CREATE, WT-LIST, WT-SAFETY).
+#
+# Each case runs bin/fugubench as a child with -Ilib, against a
+# temporary repository with one commit on main and an empty
+# .toolingrc. No case reads the operator home, and no case writes
+# outside its temporary tree.
+
+use v5.34;
+use warnings;
+use experimental 'signatures';
+no feature qw(indirect multidimensional bareword_filehandles);
+
+use Test::More;
+use Cwd        qw(abs_path);
+use File::Path qw(make_path);
+use File::Temp qw(tempdir);
+use FindBin    qw($RealBin);
+use lib "$RealBin/../../lib";
+
+use Fugu::File;
+use Fugu::Process;
+
+my $root    = "$RealBin/../..";
+my $program = "$root/bin/fugubench";
+
+plan skip_all => 'git is absent'
+    unless Fugu::Process->find_command('git');
+plan skip_all => 'make is absent'
+    unless Fugu::Process->find_command('make');
+
+# _git(@args):
+#	Run git, and die on a failure. The method returns the standard
+#	output of the child.
+sub _git (@args)
+{
+	my $result = Fugu::Process->run( cmd => [ 'git', @args ] );
+	die "git @args: $result->{stderr}" unless $result->{success};
+
+	return $result->{stdout};
+}
+
+# _write($path, $text):
+#	Write one file, and die on a failure.
+sub _write ( $path, $text )
+{
+	Fugu::File->write( $path, $text ) or die "write $path";
+
+	return;
+}
+
+# _repo($recipe, $parent):
+#	A checkout with one commit on main, an empty .toolingrc, and
+#	the bootstrap recipe of the caller. The checkout sits in the
+#	parent directory of the caller, or in a temporary directory of
+#	its own.
+#
+#	The method returns the path of the checkout and the resolved
+#	path of it, in that order: the temporary directory is a
+#	symbolic link on macOS, and git reports the resolved path.
+sub _repo ( $recipe = undef, $parent = undef )
+{
+	make_path($parent) if defined $parent && !-d $parent;
+	my $dir = tempdir(
+		CLEANUP => 1,
+		defined $parent ? ( DIR => $parent ) : () );
+	_git( 'init', '--quiet', '-b',     'main',       $dir );
+	_git( '-C',   $dir,      'config', 'user.email', 'a@b' );
+	_git( '-C',   $dir,      'config', 'user.name',  'a' );
+
+	# The test must not depend on the operator signing agent.
+	_git( '-C', $dir, 'config', 'commit.gpgsign', 'false' );
+
+	_write( "$dir/.toolingrc",  q{} );
+	_write( "$dir/.gitignore",  ".claude/worktrees/\n" );
+	_write( "$dir/f.txt",       "x\n" );
+	_write( "$dir/GNUmakefile", "bootstrap:\n\t$recipe\n" )
+	    if defined $recipe;
+
+	_git( '-C', $dir, 'add', '-A' );
+	_git( '-C', $dir, 'commit', '--quiet', '-m', 'Initial commit' );
+
+	return ( $dir, abs_path($dir) );
+}
+
+# _run($dir, @argv):
+#	Run the worktree verb against one checkout, and return the
+#	result of Fugu::Process->run.
+sub _run ( $dir, @argv )
+{
+	my $result = Fugu::Process->run(
+		cmd => [
+			$^X,  "-I$root/lib", $program, '-C',
+			$dir, 'worktree',    @argv
+		] );
+	die "cannot run $program: $result->{error}"
+	    if defined $result->{error};
+
+	return $result;
+}
+
+# _branches($dir):
+#	Each branch of one checkout, in sorted order.
+sub _branches ($dir)
+{
+	my $out = _git( '-C', $dir, 'branch', '--format=%(refname:short)' );
+
+	my @branches = sort split /\n/, $out;
+
+	return @branches;
+}
+
+# _poll($code, $limit):
+#	Call the code every tenth of a second until it answers true,
+#	or until the limit of seconds runs out. The method returns the
+#	answer of the code.
+sub _poll ( $code, $limit = 30 )
+{
+	for ( 1 .. $limit * 10 ) {
+		my $value = $code->();
+		return $value if $value;
+		select undef, undef, undef, 0.1;
+	}
+
+	return;
+}
+
+subtest 'create makes one worktree and reports its path' => sub {
+	my ( $dir, $real ) = _repo('@echo "MAIN=$(MAIN)" > bootstrap.log');
+	my $wt = "$real/.claude/worktrees/fix/auth";
+
+	my $result = _run( $dir, 'create', 'fix/auth' );
+	is( $result->{exit_code}, 0, 'create exits 0' )
+	    or diag $result->{stderr};
+	is( $result->{stdout}, "$wt\n",
+		'create writes the path as the only line (WT-CREATE-5)' );
+	ok( -d $wt, 'the worktree exists' );
+	is_deeply(
+		[ _branches($dir) ],
+		[ 'fix/auth', 'main' ],
+		'create makes the branch (WT-CREATE-1)'
+	);
+	is(
+		Fugu::File->read("$wt/bootstrap.log"),
+		"MAIN=$real\n",
+		'the bootstrap target reads MAIN (WT-CREATE-4)'
+	);
+};
+
+subtest 'create refuses a name of the wrong shape' => sub {
+	my ( $dir, $real ) = _repo();
+	my %case = (
+		'a name that starts with a dash' => [ '--', '-x' ],
+		'a name that starts with a dot'  => ['.hidden'],
+		'a name with a parent segment'   => ['a/../b'],
+	);
+
+	for my $name ( sort keys %case ) {
+		my $result = _run( $dir, 'create', @{ $case{$name} } );
+		is( $result->{exit_code}, 1,   "$name exits 1 (WT-CREATE-2)" );
+		is( $result->{stdout},    q{}, "$name writes no path" );
+
+		# The shape check stops the name, so a name of the
+		# wrong shape never reaches git as an argument.
+		like(
+			$result->{stderr},
+			qr/invalid worktree name/,
+			"the verb refuses $name itself"
+		);
+	}
+
+	is_deeply( [ _branches($dir) ], ['main'], 'a refusal makes no branch' );
+	ok( !-e "$real/.claude/worktrees", 'a refusal makes no directory' );
+};
+
+subtest 'create refuses a directory, a branch, and a nest' => sub {
+	my ( $dir, $real ) = _repo();
+	my $base = "$real/.claude/worktrees";
+
+	# A directory that git does not know is debris of a killed
+	# create. Only remove clears it (WT-CREATE-7).
+	make_path("$base/debris");
+	my $result = _run( $dir, 'create', 'debris' );
+	is( $result->{exit_code}, 1, 'create refuses a directory' );
+	like(
+		$result->{stderr},
+		qr/remove debris/,
+		'the message names the remedy'
+	);
+	ok( !-e "$base/debris/.git", 'create makes no worktree in it' );
+	is_deeply( [ _branches($dir) ],
+		['main'],
+		'create makes no branch for a directory that exists' );
+
+	# The branch step is the lock of WT-CREATE-3, so a branch that
+	# exists stops the create.
+	_git( '-C', $dir, 'branch', 'taken' );
+	$result = _run( $dir, 'create', 'taken' );
+	is( $result->{exit_code}, 1, 'create refuses a branch that exists' );
+	ok( !-e "$base/taken", 'create makes no directory for it' );
+
+	$result = _run( $dir, 'create', 'outer' );
+	is( $result->{exit_code}, 0, 'create makes the outer worktree' )
+	    or diag $result->{stderr};
+	$result = _run( $dir, 'create', 'outer/inner' );
+	is( $result->{exit_code}, 1,
+		'create refuses a name inside a worktree (WT-CREATE-2)' );
+	ok( !-e "$base/outer/inner", 'create makes no nested directory' );
+	is_deeply(
+		[ _branches($dir) ],
+		[ 'main', 'outer', 'taken' ],
+		'create makes no branch for a nested name'
+	);
+};
+
+subtest 'a failed bootstrap leaves no worktree and no branch' => sub {
+	my ( $dir, $real ) = _repo('@exit 1');
+
+	my $result = _run( $dir, 'create', 's/t' );
+	is( $result->{exit_code}, 1,   'create exits 1 (WT-CREATE-6)' );
+	is( $result->{stdout},    q{}, 'create writes no path' );
+	ok(
+		!-e "$real/.claude/worktrees/s",
+		'the cleanup removes the empty parent'
+	);
+	is_deeply( [ _branches($dir) ],
+		['main'], 'the cleanup deletes the branch' );
+	unlike( _git( '-C', $dir, 'worktree', 'list', '--porcelain' ),
+		qr{worktrees/s/t}, 'the cleanup prunes the worktree record' );
+};
+
+subtest 'a signal during the bootstrap leaves no worktree' => sub {
+	my ( $dir, $real ) = _repo('@echo $$$$ > bootstrap.pid; sleep 30');
+	my $wt  = "$real/.claude/worktrees/sig/t";
+	my $tmp = tempdir( CLEANUP => 1 );
+
+	my $child = Fugu::Process->spawn_command(
+		cmd => [
+			$^X,  "-I$root/lib", $program, '-C',
+			$dir, 'worktree',    'create', 'sig/t'
+		],
+		stdout => "$tmp/stdout",
+		stderr => "$tmp/stderr",
+	);
+	ok( $child->{success}, 'the program starts' )
+	    or die "cannot start $program: $child->{error}";
+
+	# The bootstrap reports the pid of its own child, so the case
+	# can prove that the signal stops the whole group.
+	my $pid = _poll( sub { Fugu::File->read("$wt/bootstrap.pid") } );
+	chomp $pid if defined $pid;
+	ok( $pid, 'the bootstrap child reports its pid' )
+	    or diag Fugu::File->read("$tmp/stderr") // q{};
+
+	kill 'TERM', $child->{pid};
+	waitpid $child->{pid}, 0;
+	is( $? >> 8, 1, 'the signal gives the failure code (WT-CREATE-6)' );
+	is( Fugu::File->read("$tmp/stdout"), q{}, 'create writes no path' );
+
+	ok( _poll( sub { !kill 0, $pid }, 10 ),
+		'the child of the bootstrap is gone (WT-SAFETY-3)' );
+	ok( !-e $wt, 'the worktree is gone' );
+	ok(
+		!-e "$real/.claude/worktrees/sig",
+		'the empty parent is gone (WT-CREATE-6)'
+	);
+	is_deeply( [ _branches($dir) ], ['main'], 'the branch is gone' );
+};
+
+subtest 'list reports each worktree with its age and its state' => sub {
+	my ( $dir, $real ) = _repo();
+
+	my $result = _run( $dir, 'list' );
+	is( $result->{exit_code}, 0, 'list exits 0' );
+	is(
+		$result->{stdout},
+		"no worktrees\n",
+		'list reports an empty base (WT-LIST-2)'
+	);
+
+	$result = _run( $dir, 'create', 'clean' );
+	is( $result->{exit_code}, 0, 'create makes the worktree' )
+	    or diag $result->{stderr};
+
+	$result = _run( $dir, 'list' );
+	like(
+		$result->{stdout},
+		qr/^clean\s+\d+ d\s+clean$/m,
+		'the line holds the name, the age and the state'
+	);
+
+	# The age comes from the gitfile of the worktree, and a
+	# gitfile that no read reaches gives the age ? (WT-LIST-1).
+	unlink "$real/.claude/worktrees/clean/.git"
+	    or die "unlink the gitfile: $!";
+	$result = _run( $dir, 'list' );
+	is( $result->{exit_code}, 0, 'list exits 0 without a gitfile' );
+	like(
+		$result->{stdout},
+		qr/^clean\s+[?] d\s+/m,
+		'the age of a gitfile that no read reaches is a question mark'
+	);
+};
+
+subtest 'the base of the worktrees resolves against the root' => sub {
+
+	# A clone under Projects/ inherits worktree.base from the
+	# workspace above it, and its worktrees belong to the clone.
+	# So the value resolves against the root, and not against the
+	# home of the key (CLI-CONFIG-2).
+	my $home = tempdir( CLEANUP => 1 );
+	_write( "$home/.toolingrc", "worktree.base trees\n" );
+	my ( $dir, $real ) = _repo( undef, "$home/Projects" );
+
+	my $result = _run( $dir, 'create', 'one' );
+	is( $result->{exit_code}, 0, 'create exits 0 with a configured base' )
+	    or diag $result->{stderr};
+	is( $result->{stdout}, "$real/trees/one\n",
+		'the worktree sits under the configured base (CLI-CONFIG-2)' );
+
+	$result = _run( $dir, 'list' );
+	like(
+		$result->{stdout},
+		qr/^one\s+\d+ d\s+clean$/m,
+		'list reads the configured base'
+	);
+};
+
+subtest 'a linked worktree is no main checkout' => sub {
+	my ( $dir, $real ) = _repo();
+
+	my $result = _run( $dir, 'create', 'inner' );
+	is( $result->{exit_code}, 0, 'create makes the worktree' )
+	    or diag $result->{stderr};
+
+	# The worktree holds the .toolingrc of the checkout, so the
+	# walk stops in it. Its .git is a file, not a directory.
+	$result = _run( "$real/.claude/worktrees/inner", 'list' );
+	is( $result->{exit_code}, 1,   '-C on a linked worktree exits 1' );
+	is( $result->{stdout},    q{}, 'the refusal writes no line' );
+};
+
+done_testing();

@@ -1,0 +1,109 @@
+=head1 NAME
+
+App::FuguBench::Worktree - the worktree verb of fugubench
+
+=head1 SYNOPSIS
+
+    fugubench [-C <root>] worktree create <name>
+    fugubench [-C <root>] worktree list
+
+=head1 DESCRIPTION
+
+B<App::FuguBench::Worktree> makes and lists the worktrees of one
+checkout. It holds the subcommands C<create> and C<list>, and it
+reads the subcommand as its first argument. Every other word is an
+unknown subcommand, and it gives the usage error.
+
+=head2 THE ROOT
+
+The root of the verb is the main checkout. C<-C> names the start of
+the checkout walk, and the walk finds the F<.toolingrc> of the root.
+A linked worktree holds a F<.git> file, not a directory, so the verb
+refuses such a root. No worktree then nests under another one.
+
+The path of the root comes from C<abs_path>, because git reports the
+resolved path of each worktree. The two must agree, or the listing
+finds no worktree.
+
+The base of the worktrees is the C<worktree.base> key, and the
+default is F<.claude/worktrees>. The value resolves against the root,
+and not against the home of the key. A clone under F<Projects/> can
+inherit the key from the workspace above it, and the worktrees of
+that clone still belong to the clone.
+
+=head2 create
+
+C<create E<lt>nameE<gt>> makes the worktree at
+F<< <root>/<base>/<name> >>, on a new branch C<< <name> >> that
+starts at the local HEAD of the root. It writes the worktree path to
+standard output as the only line, and that line is the contract of
+the WorktreeCreate hook.
+
+A name holds letters, digits, a dot, a dash, an underscore, and a
+slash. The first character is a letter or a digit, because a name
+that starts with a dash reaches git as an option. A name holds no
+C<..> segment. The verb refuses a name whose directory exists, and a
+name whose worktree would sit inside an existing worktree.
+
+The verb makes the branch first, as its own step. That step is the
+lock against a parallel create of one name: one create is successful,
+and every other one stops and changes nothing. After that step the
+verb owns all that it makes.
+
+After the worktree exists, the verb runs
+C<< make -C <worktree> bootstrap MAIN=<root> >> when the worktree
+holds a makefile. The bootstrap belongs to the repository, and its
+target names the paths to clone.
+
+Each child of create leads its own process group. After a failure,
+and after SIGINT or SIGTERM, the verb stops that group and waits for
+it. An orphan child then makes no file while the cleanup removes
+files. The cleanup removes the worktree, the directory, and the
+branch. It prunes the worktree records of git, and each empty parent
+directory. Every step runs, also after a step that fails, so a failed
+create leaves no worktree and no branch.
+
+=head2 list
+
+C<list> reports each worktree of the base with its name, its age in
+days, and its state. The line is C<%-40s %4s d  %s>. Without a
+worktree the subcommand writes C<no worktrees>.
+
+The state is C<clean>, or each cause that puts work at risk: an
+uncommitted change, and a commit that no remote holds. A cause names
+the repository and the reason, and C<.> names the worktree itself. An
+operator reads the state to see which worktree is safe to remove,
+because no hook removes one.
+
+The walk for the causes stops at each repository that it finds, and
+it skips F<scratch/> and a nested worktree directory. In a repository
+with no remote, a commit that the C<main> branch holds is safe. A
+linked worktree shares its ref store with the main checkout, so its
+count reads its own HEAD alone.
+
+The age comes from the F<.git> file of the worktree. That file
+records the creation, and later work leaves it alone. A file that no
+read reaches gives the age C<?>.
+
+=head1 EXIT CODES
+
+The verb returns the exit codes of L<Fugu::CLI>. A subcommand that
+does its work returns 0.
+
+It returns 1 after a failure: a root that is no main checkout, a name
+of the wrong shape, a nest, a directory that exists, a step that
+fails, or a signal.
+
+A missing argument, an extra argument, and an unknown subcommand give
+the usage error and return 2. A C<worktree.base> value of the wrong
+shape returns 3.
+
+=head1 SEE ALSO
+
+L<App::FuguBench>, L<Fugu::CLI>, L<Fugu::Process>
+
+=head1 AUTHORS
+
+Dick Olsson E<lt>hi@senzilla.ioE<gt>
+
+=cut
