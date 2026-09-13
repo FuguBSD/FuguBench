@@ -464,6 +464,43 @@ sub _installed ( $dir, $name )
 	);
 }
 
+# A dist entry downloads its tarball into a temporary directory,
+# holds it to the recorded digest, and gives the file to cpanm
+# (DEPS-INSTALL-2, DEPS-INSTALL-5)
+{
+	my $dir = _checkout(
+		'Darwin.txt' => "test dist $URL{'tool.tar.gz'}\n",
+		'SHA256.txt' => $SUMS,
+	);
+	my $r = _deps( $dir, $path, {}, '--os', 'Darwin', 'test' );
+	is( $r->{exit_code}, 0, 'a dist entry exits 0' );
+	my @ran = _log();
+	is( scalar @ran, 1, 'the dist entry runs one command' );
+	like(
+		$ran[0], qr{\Acpanm --notest \Q$tmp\E/\S+/tool\.tar\.gz\z},
+		'cpanm reads the checked download, and not the URL'
+	);
+}
+
+# A dist entry that no tier covers stops the run before the first
+# download, so no earlier entry of the type reaches cpanm
+# (DEPS-INSTALL-9, DEPS-TIER-9)
+{
+	my $dir = _checkout(
+		'Darwin.txt' => "test dist $URL{'tool.tar.gz'}\n"
+		    . "test dist $BASE/other\n",
+		'SHA256.txt' => $SUMS,
+	);
+	my $r = _deps( $dir, $path, {}, '--os', 'Darwin', 'test' );
+	is( $r->{exit_code}, 1, 'a dist entry that no tier covers exits 1' );
+	like(
+		$r->{stderr}, qr{\Q$BASE/other\E has no recorded digest},
+		'the message names the entry that no tier covers'
+	);
+	is_deeply( [ _log() ], [],
+		'no dist entry of the set reaches cpanm' );
+}
+
 # A bin entry installs into ~/.local/bin with mode 755, from a plain
 # file and from a tar archive (DEPS-INSTALL-6, DEPS-INSTALL-7)
 {
