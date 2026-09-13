@@ -224,8 +224,15 @@ builds on. A binary depends on nothing here. Each command below runs
 as a child, and it takes the environment of the run.
 
 Every entry of a type resolves, and takes its tier check, before the
-first download of that type. A set with one entry that no tier covers
-therefore downloads nothing.
+first download of that type. That pass reads the digest file and the
+key set, and it asks no network. A set with one entry that no tier
+covers downloads nothing, and a C<bin> set of that shape makes no
+install directory.
+
+The digest of an entry takes its check at the download of that entry,
+which the install of that entry follows. A mismatch on a later entry
+leaves an earlier one installed. The two loops come from the synced
+F<scripts/deps>, and the dry-run trace holds the verb to that order.
 
 A C<pkg> entry reaches the package manager of the platform:
 C<pkg_add> on OpenBSD, C<apt-get install -y> under C<sudo> on Linux,

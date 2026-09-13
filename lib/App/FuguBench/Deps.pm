@@ -739,9 +739,14 @@ sub _packages ( $ctx, @pkgs )
 
 # _dists($ctx, @urls):
 #	Fetch each distribution tarball and give it to cpanm
-#	(DEPS-INSTALL-5). Every entry resolves before the first fetch,
-#	so a set that one entry cannot resolve installs nothing
-#	(DEPS-INSTALL-9).
+#	(DEPS-INSTALL-5). Every entry resolves, and takes its tier
+#	check, before the first fetch, so a set with one entry that no
+#	tier covers installs nothing (DEPS-INSTALL-9).
+#
+#	The digest of an entry takes its check in the install loop, at
+#	the download of that entry. A mismatch there leaves an earlier
+#	entry of the set installed (DEPS-TIER-2). The two loops come
+#	from the synced scripts/deps, which CLI-CONFORMANCE-2 pins.
 sub _dists ( $ctx, @urls )
 {
 	$ctx->{app}
@@ -797,9 +802,14 @@ sub _modules ( $ctx, @modules )
 #
 #	Every entry resolves, and takes its shape check again, before
 #	the first fetch. The resolution asks no network
-#	(DEPS-ALIAS-4), so an entry that no digest names stops the run
-#	while the install directory is still as it was
-#	(DEPS-INSTALL-9).
+#	(DEPS-ALIAS-4), so an entry that no tier covers stops the run
+#	ahead of the mkdir, and a host with no install directory keeps
+#	none (DEPS-INSTALL-9).
+#
+#	The digest of an entry takes its check in the install loop, at
+#	the download of that entry. A mismatch there leaves an earlier
+#	entry of the set installed (DEPS-TIER-2). The two loops come
+#	from the synced scripts/deps, which CLI-CONFORMANCE-2 pins.
 sub _bins ( $ctx, @bins )
 {
 	my $app = $ctx->{app};
@@ -815,7 +825,6 @@ sub _bins ( $ctx, @bins )
 	}
 
 	my $bindir = File::Spec->catdir( $home, '.local', 'bin' );
-	return EXIT_ERROR unless _command( $ctx, 'mkdir', '-p', $bindir );
 
 	my @entry;
 	for my $bin (@bins) {
@@ -834,13 +843,15 @@ sub _bins ( $ctx, @bins )
 		    unless _check_bin_names( $app, $name, $member,
 			"the resolved entry $name" );
 
-		# An entry that no tier covers stops the run here, while
-		# the install directory is still as it was
+		# An entry that no tier covers stops the run here, ahead
+		# of the mkdir of the install directory
 		# (DEPS-INSTALL-9).
 		return EXIT_ERROR unless _check_tier( $ctx, $url );
 
 		push @entry, [ $name, $url, $member ];
 	}
+
+	return EXIT_ERROR unless _command( $ctx, 'mkdir', '-p', $bindir );
 
 	for my $bin (@entry) {
 		my ( $name, $url, $member ) = @$bin;

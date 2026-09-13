@@ -78,8 +78,13 @@ runs in-process through Fugu LIB-SIGNIFY with the engine of Fugu LIB-ED25519.
   start with a dash, which `tar` and `unzip` read as an option. The check must
   run over every line, and again after the alias words expand.
 - **DEPS-INSTALL-9** — The verb must resolve every entry of a type, and check
-  its tier, before the first install of that type. A set that one entry cannot
-  verify installs nothing, and the install directory stays as it was.
+  that a tier covers it, before the first install of that type. That pre-pass
+  reads the digest file and the key set, and it asks no network. A set with one
+  entry that no tier covers must install nothing, and the verb must make no
+  install directory. The digest of an entry takes its check at the download of
+  that entry, which the install of that entry follows. A mismatch on a later
+  entry leaves an earlier one installed. The install order comes from the synced
+  `scripts/deps`, which CLI-CONFORMANCE-2 pins.
 - **DEPS-INSTALL-10** — On success the verb must end with one line that names
   the installed environment.
 
@@ -120,8 +125,10 @@ release directory with unique file names, so it keys on the file name.
 - **DEPS-TIER-1** — Each download must land in a temporary directory of its own.
   The verb must check the bytes before it extracts an archive, before `cpanm`
   reads a tarball, and before a file reaches the install directory.
-- **DEPS-TIER-2** — A failed check must stop the install and leave the install
-  directory as it was.
+- **DEPS-TIER-2** — A failed check must stop the install at once, and the entry
+  of that check must install nothing. An earlier entry of the same set installs
+  before the download of a later one, so it stays. DEPS-INSTALL-9 states what
+  the pre-pass of a set covers.
 - **DEPS-TIER-3** — `deps/SHA256.txt` records a sha256 digest for each download
   with a versioned name. A line reads `SHA256 (url) = hexdigest`, and the key is
   the whole download URL. The verb must read and write the file through the

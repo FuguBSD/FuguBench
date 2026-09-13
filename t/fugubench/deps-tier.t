@@ -269,9 +269,18 @@ sub _checkout (%file)
 #	no .toolingrc.
 sub _child (@argv)
 {
+	return _child_home( $home, @argv );
+}
+
+# _child_home($where, @argv):
+#	Run the program with $where as HOME. A case that asserts the
+#	state of the install directory takes a HOME of its own, because
+#	the shared one holds the installs of every other case.
+sub _child_home ( $where, @argv )
+{
 	my $result = Fugu::Process->run(
 		cmd => [ $^X, "-I$repo/lib", $program, @argv ],
-		env => { PATH => $bin, HOME => $home, TMPDIR => $tmp, %LIB },
+		env => { PATH => $bin, HOME => $where, TMPDIR => $tmp, %LIB },
 		cwd => $tree,
 	);
 	die "cannot run $program: $result->{error}\n"
@@ -554,6 +563,25 @@ sub _bin ( $url, %file )
 		like( $r->{stderr}, $re, "$name names the fault" );
 		is( $r->{stdout}, q{}, "$name writes no trace" );
 	}
+}
+
+# The verb makes the install directory after the tier check, so a bin
+# entry that no tier covers leaves no directory behind
+# (DEPS-INSTALL-9, DEPS-TIER-2)
+{
+	my $own = "$tree/home-bare";
+	make_path($own);
+
+	# The checkout declares no key and records no digest, so the
+	# entry reaches no tier. The check asks no network.
+	my $dir = _checkout(
+		'Darwin.txt' => "test bin tool http://127.0.0.1:$port/"
+		    . "bare/tool-1.0.0\n" );
+	my $r =
+	    _child_home( $own, '-C', $dir, 'deps', '--os', 'Darwin', 'test' );
+	is( $r->{exit_code}, 1, 'an entry that no tier covers exits 1' );
+	ok( !-e "$own/.local",
+		'a failed tier check leaves no install directory' );
 }
 
 # The fetch verb takes the file and then the URL, and it is silent on
