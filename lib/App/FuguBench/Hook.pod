@@ -98,7 +98,7 @@ the path alone.
 
 C<install> writes F<.claude/settings.json> of the checkout: the four
 entries under C<hooks>, and C<head> at C<worktree.baseRef>. A worktree
-starts at the local HEAD. Without that value the built-in creation
+starts at the local HEAD. Without the hooks, the built-in creation
 branches from C<origin/main> and skips the bootstrap.
 
 The subcommand answers no event, so it reads no payload, and it takes

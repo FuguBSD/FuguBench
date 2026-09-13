@@ -176,7 +176,8 @@ sub _tools ()
 #
 #	A checkout that holds one event gives one worktree.baseRef
 #	line too, because hook install writes that value beside the
-#	entries (HOOK-INSTALL-4).
+#	entries (HOOK-INSTALL-4). A worktree key that holds no object
+#	gives the problem line of that key in its place.
 #
 #	The file that no read reaches, the file that holds no JSON
 #	object, and a container key that holds no object are problems,
@@ -231,8 +232,8 @@ sub _same ( $check, $found, $want )
 # _worktree($settings, $path, $installed):
 #	The lines of the worktree settings of hook install
 #	(HOOK-INSTALL-4). The subcommand writes them beside the
-#	entries, and a worktree of the harness starts at origin/main
-#	without them.
+#	entries. Without the hooks, a worktree of the harness starts
+#	at origin/main.
 #
 #	A value line follows an install alone, because a checkout that
 #	installs no hook needs no value of that key. A key of another

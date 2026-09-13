@@ -63,8 +63,8 @@ C<absent> for an event that the file lost, and
 C<differs from hook install> for every other entry.
 
 A checkout that holds one event gives one C<worktree.baseRef> line
-too, and a C<worktree> key that holds no object gives the problem
-line of that key in its place. C<hook install> writes the base
+too. A C<worktree> key that holds no object gives the problem line of
+that key in its place. C<hook install> writes the base
 reference beside the entries. Without the hooks, the built-in
 creation of a worktree branches from C<origin/main> and skips the
 bootstrap. The detail is C<installed>, C<absent>, or
