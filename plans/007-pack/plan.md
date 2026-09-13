@@ -101,9 +101,9 @@ the module to that file.
 **Neither verb reads a checkout.** `curl | sh` runs `install` in a home with no
 `.toolingrc`, and a fresh clone runs the shim before any install. The two verbs
 never call `checkout`, and the dispatcher builds the checkout on the first call
-only. Neither verb runs a child, so the two rows pledge and unveil, as plan 001
-states. Each row unveils the directory of the running file, the home paths, and
-the temporary directory.
+only. Each verb opens a file of its own, so the two rows pledge and unveil, as
+plan 001 states. Each row unveils the directory of the running file, the home
+paths, and the temporary directory.
 
 ## The interface contract
 

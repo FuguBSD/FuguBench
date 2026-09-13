@@ -20,50 +20,50 @@ phase applies.
 
 ## Units
 
-| Unit                                      | State | Done by | Note                                                    |
-| ----------------------------------------- | ----- | ------- | ------------------------------------------------------- |
-| [CLI-PROGRAM](cli.md#cli-program)         | open  | —       | The executable and its channels.                        |
-| [CLI-VERBS](cli.md#cli-verbs)             | open  | —       | The verb table.                                         |
-| [CLI-CHECKOUT](cli.md#cli-checkout)       | open  | —       | The discovery of the checkout root.                     |
-| [CLI-CONFIG](cli.md#cli-config)           | open  | —       | The keys of `.toolingrc`.                               |
-| [CLI-FUGU](cli.md#cli-fugu)               | open  | —       | The Fugu modules that the program uses.                 |
-| [CLI-SANDBOX](cli.md#cli-sandbox)         | open  | —       | pledge and unveil on OpenBSD.                           |
-| [CLI-DOCTOR](cli.md#cli-doctor)           | open  | —       | The state report of a checkout.                         |
-| [CLI-CONFORMANCE](cli.md#cli-conformance) | open  | —       | The tests inherited from the Workspace scripts.         |
-| [DEPS-MANIFEST](deps.md#deps-manifest)    | open  | —       | Design from Tooling MK-DEPS and the synced script.      |
-| [DEPS-INSTALL](deps.md#deps-install)      | open  | —       | Design from the synced script.                          |
-| [DEPS-ALIAS](deps.md#deps-alias)          | open  | —       | Design from Tooling SYNC-ALIAS.                         |
-| [DEPS-TIER](deps.md#deps-tier)            | open  | —       | Design from Tooling SYNC-DOWNLOAD, verified in-process. |
-| [DEPS-KEYS](deps.md#deps-keys)            | open  | —       | Design from Tooling SYNC-KEYS.                          |
-| [DEPS-SUMS](deps.md#deps-sums)            | open  | —       | Design from Tooling SYNC-SUMS.                          |
-| [DEPS-FETCH](deps.md#deps-fetch)          | open  | —       | Every download through Fugu LIB-CURL.                   |
-| [WT-CREATE](worktree.md#wt-create)        | open  | —       | Design from Workspace WS-WORKTREE.                      |
-| [WT-REMOVE](worktree.md#wt-remove)        | open  | —       | Design from Workspace WS-WORKTREE.                      |
-| [WT-LIST](worktree.md#wt-list)            | open  | —       | Design from Workspace WS-WORKTREE.                      |
-| [WT-CLONE](worktree.md#wt-clone)          | open  | —       | Design from Workspace WS-BOOTSTRAP.                     |
-| [WT-SAFETY](worktree.md#wt-safety)        | open  | —       | Design from Workspace WS-WORKTREE.                      |
-| [WIKI-CLONE](wiki.md#wiki-clone)          | open  | —       | Design from Workspace LIB-WIKI.                         |
-| [WIKI-PAGES](wiki.md#wiki-pages)          | open  | —       | Design from Workspace LIB-PAGES.                        |
-| [WIKI-OPEN](wiki.md#wiki-open)            | open  | —       | The fetch before the count, and the rename.             |
-| [WIKI-CAPTURE](wiki.md#wiki-capture)      | open  | —       | Design from Workspace LIB-WIKI.                         |
-| [WIKI-STATUS](wiki.md#wiki-status)        | open  | —       | Design from Workspace LIB-WIKI and LIB-CANDIDATE.       |
-| [WIKI-CONFINE](wiki.md#wiki-confine)      | open  | —       | Design from Workspace LIB-WIKI.                         |
-| [HOOK-EVENTS](hooks.md#hook-events)       | open  | —       | Design from Workspace WS-HOOKS and LIB-HOOKS.           |
-| [HOOK-SESSION](hooks.md#hook-session)     | open  | —       | Design from Workspace LIB-HOOKS.                        |
-| [HOOK-WORKTREE](hooks.md#hook-worktree)   | open  | —       | Design from Workspace WS-HOOKS.                         |
-| [HOOK-INSTALL](hooks.md#hook-install)     | open  | —       | The settings writer.                                    |
-| [TRACE-NAME](traces.md#trace-name)        | open  | —       | Design from Workspace WS-SESSION.                       |
-| [TRACE-COLUMNS](traces.md#trace-columns)  | open  | —       | Design from Workspace WS-SESSION.                       |
-| [TRACE-USAGE](traces.md#trace-usage)      | open  | —       | Design from Workspace WS-SESSION.                       |
-| [TRACE-PANEL](traces.md#trace-panel)      | open  | —       | Design from Workspace WS-SESSION.                       |
-| [TRACE-SUB](traces.md#trace-sub)          | open  | —       | Design from Workspace WS-SESSION.                       |
-| [DIST-PACK](dist.md#dist-pack)            | open  | —       | The packed file.                                        |
-| [DIST-ASSETS](dist.md#dist-assets)        | open  | —       | The release assets.                                     |
-| [DIST-SHIM](dist.md#dist-shim)            | open  | —       | The wrapper shim of a consumer.                         |
-| [DIST-INSTALL](dist.md#dist-install)      | open  | —       | The install script and the install verb.                |
-| [DIST-UPDATE](dist.md#dist-update)        | open  | —       | The verified self-update.                               |
-| [DIST-KEY](dist.md#dist-key)              | open  | —       | The embedded release keys.                              |
-| [DIST-VERSION](dist.md#dist-version)      | open  | —       | The version verb.                                       |
+| Unit                                      | State   | Done by | Note                                                                                                                                                                                                                       |
+| ----------------------------------------- | ------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [CLI-PROGRAM](cli.md#cli-program)         | partial | —       | CLI-PROGRAM-1 needs the pack. [The dispatcher](../lib/App/FuguBench.pm) runs from the checkout with an installed Fugu.                                                                                                     |
+| [CLI-VERBS](cli.md#cli-verbs)             | partial | —       | [`version`](../lib/App/FuguBench/Version.pm) alone. Each other verb of the table is absent.                                                                                                                                |
+| [CLI-CHECKOUT](cli.md#cli-checkout)       | partial | —       | [The walk](../lib/App/FuguBench/Checkout.pm), [the tests](../t/fugubench/checkout.t). Absent: the payload start of CLI-CHECKOUT-1, the configuration error of CLI-CHECKOUT-3, and the `deps` start rule of CLI-CHECKOUT-5. |
+| [CLI-CONFIG](cli.md#cli-config)           | partial | —       | [The reader](../lib/App/FuguBench/Checkout.pm), [the tests](../t/fugubench/checkout.t). Absent: the configuration error that names a key, and the two anchors of CLI-CONFIG-2.                                             |
+| [CLI-FUGU](cli.md#cli-fugu)               | partial | —       | The verifier and the downloader are absent. They come with the dependency installer.                                                                                                                                       |
+| [CLI-SANDBOX](cli.md#cli-sandbox)         | partial | —       | [The table](../lib/App/FuguBench.pm) holds the row of `version`, and that row is CLI-SANDBOX-3. The unveil of CLI-SANDBOX-2 waits for the first verb that opens a file. Each other verb adds its row.                      |
+| [CLI-DOCTOR](cli.md#cli-doctor)           | open    | —       | The state report of a checkout.                                                                                                                                                                                            |
+| [CLI-CONFORMANCE](cli.md#cli-conformance) | open    | —       | The tests inherited from the Workspace scripts.                                                                                                                                                                            |
+| [DEPS-MANIFEST](deps.md#deps-manifest)    | open    | —       | Design from Tooling MK-DEPS and the synced script.                                                                                                                                                                         |
+| [DEPS-INSTALL](deps.md#deps-install)      | open    | —       | Design from the synced script.                                                                                                                                                                                             |
+| [DEPS-ALIAS](deps.md#deps-alias)          | open    | —       | Design from Tooling SYNC-ALIAS.                                                                                                                                                                                            |
+| [DEPS-TIER](deps.md#deps-tier)            | open    | —       | Design from Tooling SYNC-DOWNLOAD, verified in-process.                                                                                                                                                                    |
+| [DEPS-KEYS](deps.md#deps-keys)            | open    | —       | Design from Tooling SYNC-KEYS.                                                                                                                                                                                             |
+| [DEPS-SUMS](deps.md#deps-sums)            | open    | —       | Design from Tooling SYNC-SUMS.                                                                                                                                                                                             |
+| [DEPS-FETCH](deps.md#deps-fetch)          | open    | —       | Every download through Fugu LIB-CURL.                                                                                                                                                                                      |
+| [WT-CREATE](worktree.md#wt-create)        | open    | —       | Design from Workspace WS-WORKTREE.                                                                                                                                                                                         |
+| [WT-REMOVE](worktree.md#wt-remove)        | open    | —       | Design from Workspace WS-WORKTREE.                                                                                                                                                                                         |
+| [WT-LIST](worktree.md#wt-list)            | open    | —       | Design from Workspace WS-WORKTREE.                                                                                                                                                                                         |
+| [WT-CLONE](worktree.md#wt-clone)          | open    | —       | Design from Workspace WS-BOOTSTRAP.                                                                                                                                                                                        |
+| [WT-SAFETY](worktree.md#wt-safety)        | open    | —       | Design from Workspace WS-WORKTREE.                                                                                                                                                                                         |
+| [WIKI-CLONE](wiki.md#wiki-clone)          | open    | —       | Design from Workspace LIB-WIKI.                                                                                                                                                                                            |
+| [WIKI-PAGES](wiki.md#wiki-pages)          | open    | —       | Design from Workspace LIB-PAGES.                                                                                                                                                                                           |
+| [WIKI-OPEN](wiki.md#wiki-open)            | open    | —       | The fetch before the count, and the rename.                                                                                                                                                                                |
+| [WIKI-CAPTURE](wiki.md#wiki-capture)      | open    | —       | Design from Workspace LIB-WIKI.                                                                                                                                                                                            |
+| [WIKI-STATUS](wiki.md#wiki-status)        | open    | —       | Design from Workspace LIB-WIKI and LIB-CANDIDATE.                                                                                                                                                                          |
+| [WIKI-CONFINE](wiki.md#wiki-confine)      | open    | —       | Design from Workspace LIB-WIKI.                                                                                                                                                                                            |
+| [HOOK-EVENTS](hooks.md#hook-events)       | open    | —       | Design from Workspace WS-HOOKS and LIB-HOOKS.                                                                                                                                                                              |
+| [HOOK-SESSION](hooks.md#hook-session)     | open    | —       | Design from Workspace LIB-HOOKS.                                                                                                                                                                                           |
+| [HOOK-WORKTREE](hooks.md#hook-worktree)   | open    | —       | Design from Workspace WS-HOOKS.                                                                                                                                                                                            |
+| [HOOK-INSTALL](hooks.md#hook-install)     | open    | —       | The settings writer.                                                                                                                                                                                                       |
+| [TRACE-NAME](traces.md#trace-name)        | open    | —       | Design from Workspace WS-SESSION.                                                                                                                                                                                          |
+| [TRACE-COLUMNS](traces.md#trace-columns)  | open    | —       | Design from Workspace WS-SESSION.                                                                                                                                                                                          |
+| [TRACE-USAGE](traces.md#trace-usage)      | open    | —       | Design from Workspace WS-SESSION.                                                                                                                                                                                          |
+| [TRACE-PANEL](traces.md#trace-panel)      | open    | —       | Design from Workspace WS-SESSION.                                                                                                                                                                                          |
+| [TRACE-SUB](traces.md#trace-sub)          | open    | —       | Design from Workspace WS-SESSION.                                                                                                                                                                                          |
+| [DIST-PACK](dist.md#dist-pack)            | open    | —       | The packed file.                                                                                                                                                                                                           |
+| [DIST-ASSETS](dist.md#dist-assets)        | open    | —       | The release assets.                                                                                                                                                                                                        |
+| [DIST-SHIM](dist.md#dist-shim)            | open    | —       | The wrapper shim of a consumer.                                                                                                                                                                                            |
+| [DIST-INSTALL](dist.md#dist-install)      | open    | —       | The install script and the install verb.                                                                                                                                                                                   |
+| [DIST-UPDATE](dist.md#dist-update)        | open    | —       | The verified self-update.                                                                                                                                                                                                  |
+| [DIST-KEY](dist.md#dist-key)              | open    | —       | The embedded release keys.                                                                                                                                                                                                 |
+| [DIST-VERSION](dist.md#dist-version)      | partial | —       | [The verb](../lib/App/FuguBench/Version.pm), [the tests](../t/fugubench/cli.t). Absent: DIST-VERSION-2, which needs the shim of DIST-SHIM.                                                                                 |
 
 ## Update protocol
 
@@ -76,15 +76,15 @@ phase applies.
 
 The drift gate maps each document to the code that implements it.
 
-| Document    | Roots                                     |
-| ----------- | ----------------------------------------- |
-| cli.md      | `lib`, `bin`, `t`                         |
-| deps.md     | `lib`, `t`                                |
-| worktree.md | `lib`, `t`                                |
-| wiki.md     | `lib`, `t`                                |
-| hooks.md    | `lib`, `t`                                |
-| traces.md   | `lib`, `t`                                |
-| dist.md     | `scripts`, `mk`, `.github/workflows`, `t` |
+| Document    | Roots                                            |
+| ----------- | ------------------------------------------------ |
+| cli.md      | `lib`, `bin`, `t`                                |
+| deps.md     | `lib`, `t`                                       |
+| worktree.md | `lib`, `t`                                       |
+| wiki.md     | `lib`, `t`                                       |
+| hooks.md    | `lib`, `t`                                       |
+| traces.md   | `lib`, `t`                                       |
+| dist.md     | `lib`, `scripts`, `mk`, `.github/workflows`, `t` |
 
 ## Retired IDs
 

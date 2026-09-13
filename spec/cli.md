@@ -13,12 +13,14 @@ the sandbox, the doctor, and the conformance tests.
   perl 5.34 and core modules alone. It must load no CPAN module, and it must
   need no installed Fugu.
 - **CLI-PROGRAM-2** — The command line is
-  `fugubench [-C <dir>] <verb> [options] [arguments]`. The `-C` option names the
-  directory that a verb reads as its checkout root, before the discovery of
-  CLI-CHECKOUT.
+  `fugubench [-C <dir>] [--verbose] <verb> [options] [arguments]`. The `-C`
+  option names the directory that a verb reads as its checkout root, before the
+  discovery of CLI-CHECKOUT. CLI-PROGRAM-7 states the `--verbose` option.
 - **CLI-PROGRAM-3** — `fugubench --help` and `fugubench <verb> --help` must
   print the usage to standard output and exit 0. A usage error must print the
-  usage to standard error and exit 2.
+  usage to standard error and exit 2. A command line that holds no verb and no
+  request for the help is a usage error. A global option in front of no verb
+  does not change that.
 - **CLI-PROGRAM-4** — Standard output must carry the result of a verb only.
   Every diagnostic, and every line that a child command writes, must go to
   standard error. A hook reads standard output, so a git message must never
@@ -71,8 +73,8 @@ worktrees, or the library clone.
 - **CLI-CHECKOUT-2** — The program must walk up from the start to the nearest
   directory that holds `.toolingrc`. A verb that needs a configuration key must
   continue to the nearest `.toolingrc` that holds the key. A clone under
-  `Projects/` holds its own `.toolingrc` without a `wiki.dir` key, so the walk
-  for the library reaches the workspace.
+  `Projects/` holds its own `.toolingrc` without a `wiki.origin` key, so the
+  walk for the library reaches the workspace.
 - **CLI-CHECKOUT-3** — The walk must stop at the filesystem root. When no
   `.toolingrc` exists, the program must report the start directory and exit with
   a configuration error.
@@ -81,7 +83,10 @@ worktrees, or the library clone.
   marker to find a checkout, except where TRACE-NAME says so.
 - **CLI-CHECKOUT-5** — `deps` is the exception. It reads `deps/<OS>.txt`
   relative to the start directory, with no walk. A guest runs `make deps` out of
-  an extracted tarball, and that tree holds no `.toolingrc`.
+  an extracted tarball, and that tree holds no `.toolingrc`. The verbs
+  `version`, `shim`, `install`, `update`, and `fetch` read no checkout, so the
+  walk must not run for them. The install of DIST-INSTALL-3 then works in a home
+  with no `.toolingrc`.
 
 <a id="cli-config"></a>
 
@@ -93,7 +98,7 @@ starts a comment.
 
 | Key             | Meaning                                            | Default                        |
 | --------------- | -------------------------------------------------- | ------------------------------ |
-| `wiki.dir`      | The directory of the library clone, under the root | `Wiki`                         |
+| `wiki.dir`      | The library clone, under the home of `wiki.origin` | `Wiki`                         |
 | `wiki.origin`   | The URL of the library repository                  | none; `wiki init` stops        |
 | `wiki.project`  | The project name of a session at the root          | the name of the root directory |
 | `wiki.projects` | The directory whose children are project clones    | `Projects`                     |
@@ -103,7 +108,10 @@ starts a comment.
   ignore every other key. Other tools own other prefixes.
 - **CLI-CONFIG-2** — A key with a default must take the default when the file
   omits it. A key without a default must stop the verb that needs it with a
-  configuration error that names the key.
+  configuration error that names the key. The home of a key is the directory of
+  the `.toolingrc` that holds it, and the root is the home of a default. A verb
+  must anchor a `wiki.` value at the home of `wiki.origin`, and `worktree.base`
+  at the root.
 - **CLI-CONFIG-3** — A value must pass the shape check of its use. A directory
   is a relative path with no `..` segment, and a URL holds a scheme.
 
@@ -130,10 +138,19 @@ starts a comment.
 - **CLI-SANDBOX-1** — On OpenBSD, each verb must pledge its promises and unveil
   its paths through Fugu LIB-SANDBOX before it does its work. On another
   platform the calls change nothing.
-- **CLI-SANDBOX-2** — A verb must unveil the checkout root, the install
-  directory of DEPS-INSTALL-6, the cache directory of DIST-SHIM, and one
-  temporary directory. It must unveil nothing else. `deps` and `update` add the
-  network promises, and `traces` and `worktree list` need none.
+- **CLI-SANDBOX-2** — A verb that runs a child command must pledge its promises,
+  and must unveil nothing. unveil(2) holds across an exec, and no row can name
+  each file that a child opens. A verb that opens a file of its own must unveil
+  the paths of its row. A row names the checkout root, the install directory of
+  DEPS-INSTALL-6, and the cache directory of DIST-SHIM. A row also names one
+  temporary directory, the perl library directories, the directory of the
+  running file, and the trace root. It must unveil nothing else. The three verbs
+  that unveil are `shim`, `install`, and `traces`. Every other verb unveils
+  nothing, `deps` among them. The verbs `wiki`, `hook`, `deps`, `fetch`, and
+  `update` add a network promise.
+- **CLI-SANDBOX-3** — A verb that opens no file must pledge `stdio` and must
+  unveil nothing. `stdio` denies open(2), so an unveil under it opens no file
+  and hides no file. `version` is that verb.
 
 <a id="cli-doctor"></a>
 
