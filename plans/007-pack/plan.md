@@ -2,28 +2,25 @@
 
 ## Status
 
-Proposed. It lands after plan 001, and it waits on no other plan of this
+Work package 1 landed the packer, the `make dist` hook, and
+`t/fugubench/pack.t`. Package 2 and package 3 wait on no other plan of this
 repository. The packer packs the modules that exist, and the module list test
 grows with each verb plan.
 
-The proof of DIST-PACK-5 on perl 5.34 waits on a Fugu release with the v5.34
-floor. Fugu plan 008 holds that change, and the installed Fugu 0.4.0 holds
-`use v5.36`. The pruned `@INC` test lands now and runs on the perl of the host.
-Two pieces of work sit in other repositories: FuguBSD/Website serves
-`install.sh` at `https://fugubsd.org/get`, and Tooling ships the shim in the org
-pack (D-09). The release workflow publishes `fugubench` and `install.sh` under
+Fugu v0.5.0 carries the v5.34 floor, so the packed file runs on perl 5.34. The
+test runs the pruned `@INC` case on the perl of the suite, and on a perl 5.34 of
+the host. Two pieces of work sit in other repositories. FuguBSD/Website serves a
+stub at `https://bench.fugubsd.org/get`, and the stub fetches the `install.sh`
+of the latest release and runs it. Tooling ships the shim in the org pack
+(D-09). The release workflow publishes `fugubench` and `install.sh` under
 DIST-ASSETS, in the plan of that unit.
 
-Implements: DIST-PACK. Implements: DIST-SHIM. Implements: DIST-INSTALL without
-DIST-INSTALL-3. Implements: DIST-KEY without DIST-KEY-2.
+Implements: DIST-SHIM. Implements: DIST-INSTALL without DIST-INSTALL-3.
+Implements: DIST-KEY without DIST-KEY-2.
 
 Implements: CLI-VERBS. This plan adds the `shim` verb and the `install` verb.
 
 Implements: CLI-SANDBOX. This plan adds the rows of the two verbs.
-
-Implements: CLI-PROGRAM. This plan lands the one-file rule of CLI-PROGRAM-1: the
-packed file runs with core perl and no installed Fugu. The perl 5.34 run waits
-with DIST-PACK-5 on a Fugu release with the floor, so the unit stays `partial`.
 
 ## Purpose
 
@@ -75,9 +72,11 @@ that no packed module is core in perl 5.34, through `Module::CoreList`
 
 **The pack format is the App::FatPacker scheme, written here.** A `BEGIN` block
 installs an `@INC` hook over a hash of module sources, the modules sorted by
-name. The text of `bin/fugubench` follows, without its shebang line. The file
-holds no timestamp and no path of the build host, so two builds of one tree give
-one byte sequence (DIST-PACK-4).
+name. The text of `bin/fugubench` follows, without its shebang line, and without
+its `FindBin` and `lib` lines. Those two lines put `lib/` of a checkout in front
+of the pack, and `build/fugubench` sits beside that directory. The file holds no
+timestamp and no path of the build host, so two builds of one tree give one byte
+sequence (DIST-PACK-4).
 
 **The shim knows its own file.** The `shim` verb reads the sha256 digest of `$0`
 with `Digest::SHA`, and the version from `App::FuguBench->VERSION`. In a
@@ -186,6 +185,8 @@ operator home. A test that builds a pack passes `--out` and a test version, so
 - The packed modules equal the closure of `lib/` over the installed Fugu, plus
   every module under `lib/App/FuguBench/`.
 - No packed module is core in perl 5.34.
+- The packed file beside a `lib/App/FuguBench.pm` of a checkout loads its own
+  module, and not that file.
 
 `t/fugubench/dist.t` covers, with a pack in the temporary tree:
 
@@ -217,9 +218,8 @@ operator home. A test that builds a pack passes `--out` and a test version, so
 
 - `make check` passes, and `make dist` writes the tarball, `build/fugubench`,
   and `build/install.sh`.
-- `spec/STATUS.md` sets DIST-SHIM to `done`. It sets DIST-PACK to `partial`, and
-  the note names DIST-PACK-5 on perl 5.34. It sets CLI-PROGRAM to `partial`, and
-  the note names the perl 5.34 run of CLI-PROGRAM-1. It sets DIST-INSTALL to
+- `spec/STATUS.md` sets DIST-SHIM to `done`. DIST-PACK and CLI-PROGRAM are
+  `done` already, and no later package changes them. It sets DIST-INSTALL to
   `partial`, and the note names DIST-INSTALL-3 and FuguBSD/Website. It sets
   DIST-KEY to `partial`, and the note names DIST-KEY-2 until `update` lands.
   CLI-VERBS and CLI-SANDBOX stay `partial`, and each note drops the two verbs.
