@@ -6,14 +6,17 @@ App::FuguBench::Wiki - the wiki verb of fugubench
 
     fugubench [-C <dir>] wiki init
     fugubench [-C <dir>] wiki open <project> <session>
+    fugubench [-C <dir>] wiki note <page> <file>
+    fugubench [-C <dir>] wiki admit <page> <file>
+    fugubench [-C <dir>] wiki close <session>
 
 =head1 DESCRIPTION
 
 B<App::FuguBench::Wiki> operates the learning library: a git
 repository of flat pages, cloned into one checkout. The subcommands
-are C<init> and C<open>, and the verb reads the subcommand as its
-first argument. Every other word is an unknown subcommand, and it
-gives the usage error.
+are C<init>, C<open>, C<note>, C<admit>, and C<close>, and the verb
+reads the subcommand as its first argument. Every other word is an
+unknown subcommand, and it gives the usage error.
 
 Every capture commits, and then pushes. The commit carries the
 durability, and the push carries the visibility. A failed push warns,
@@ -69,6 +72,31 @@ dash, and an underscore. The first character is a letter or a digit,
 because a token that starts with a dash reaches git as an option. A
 token of another shape gives the usage error.
 
+=head2 note and admit
+
+C<note E<lt>pageE<gt> E<lt>fileE<gt>> and
+C<admit E<lt>pageE<gt> E<lt>fileE<gt>> append the text of the file to
+the page after one blank line. Then they commit it, push it, and
+write the page name to standard output. The two subcommands differ in
+the word of the commit subject only.
+
+The page name takes the C<.md> suffix or leaves it out, and the
+result line carries the suffix. An absent page, an absent file, and a
+file with no text are failures, and each message names the value of
+the caller.
+
+=head2 close
+
+C<close E<lt>sessionE<gt>> appends the C<Closed:> line to the page of
+the session, commits it, pushes it, and writes the page name to
+standard output.
+
+C<close> carries no durability of its own, because every observation
+reached a commit through C<note>. So a page that holds the line
+already changes nothing, and a session with no page changes nothing.
+Both report on standard error and write no result line. A session
+that runs no campaign opens no page, and that is normal.
+
 =head2 THE RACE
 
 Two sessions of one day take one page name when each one counts the
@@ -115,11 +143,13 @@ The verb returns the exit codes of L<Fugu::CLI>. A subcommand that
 does its work returns 0. An absent clone returns 0 with no result
 line, and a failed push returns 0 with a warning.
 
-It returns 1 after a failure: a page that no write reaches, or a
-stage or a commit that fails.
+It returns 1 after a failure: a page that no write reaches, a page or
+a file that C<note> and C<admit> do not find, a file with no text, or
+a stage or a commit that fails.
 
-A missing argument, an extra argument, an unknown subcommand, and an
-invalid token give the usage error and return 2.
+A missing argument, an extra argument, an unknown subcommand, an
+invalid token, and an invalid page name give the usage error and
+return 2.
 
 It returns 3 after a configuration error: no F<.toolingrc> above the
 start, a C<wiki.origin> that C<init> does not find, a URL with no

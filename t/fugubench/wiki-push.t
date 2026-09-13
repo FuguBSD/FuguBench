@@ -1,8 +1,9 @@
 #!/usr/bin/env perl
 # ex:ts=8 sw=4:
 # The count of the pages, the rename of a page that the origin took,
-# and the push of the wiki verb (WIKI-OPEN-2, WIKI-OPEN-3,
-# WIKI-CAPTURE-5).
+# the append of one capture, and the push of the wiki verb
+# (WIKI-OPEN-2, WIKI-OPEN-3, WIKI-CAPTURE-1, WIKI-CAPTURE-4,
+# WIKI-CAPTURE-5, WIKI-CAPTURE-6).
 #
 # On 2026-09-09 two parallel sessions of one day took one page name,
 # and the rebase of the loser stopped on an add/add conflict. So each
@@ -243,5 +244,98 @@ HOOK
 	    split /\n/, $r->{stderr};
 	is( "@forced", q{}, 'no traced git command forces a push' );
     };
+
+subtest 'two clones append to one page, and the rebase of the loser stops' =>
+    sub {
+	my ( $tree, $origin ) = _tree();
+	my $one = _checkout( $tree, $origin, 'c1' );
+
+	my $r = _run( $tree, $one, 'open', 'P', 'sess-1' );
+	is( $r->{exit_code}, 0, 'open exits 0' ) or diag $r->{stderr};
+
+	# The peer clones after the push of the page, so both clones
+	# hold the page, and both append to its end.
+	my $two = _checkout( $tree, $origin, 'c2' );
+
+	_write( "$tree/peer.md", "Claim: the peer writes first.\n" );
+	$r = _run( $tree, $two, 'note', _page(1), "$tree/peer.md" );
+	is( $r->{exit_code}, 0, 'the peer notes and pushes' )
+	    or diag $r->{stderr};
+	is( $r->{stdout}, _page(1) . "\n", 'note writes the page name' );
+	like(
+		Fugu::File->read( "$two/Wiki/" . _page(1) ),
+		qr/^[#][#] Observations\n\nClaim: the peer writes first[.]\n\z/m,
+		'the append leaves one blank line (WIKI-CAPTURE-1)'
+	);
+
+	# The clone of the first checkout is behind now, so its push
+	# meets a rejection. The rebase of its commit stops, because
+	# both commits append to the end of one page.
+	_write( "$tree/obs.md", "Claim: the loser writes second.\n" );
+	$r = _child( $tree, '--verbose', '-C', $one, 'wiki', 'note',
+		_page(1), "$tree/obs.md" );
+	is( $r->{exit_code}, 0, 'the loser exits 0 (WIKI-CAPTURE-4)' );
+	is( $r->{stdout}, _page(1) . "\n", 'the loser writes the page name' );
+	like( $r->{stderr}, qr/rebasing and retrying/, 'the retry ran' );
+	like( $r->{stderr}, qr/the rebase stopped/, 'the rebase stopped' );
+	like( $r->{stderr}, qr/push failed, the commit stays local/,
+		'the loser warns' );
+
+	ok( !-e "$one/Wiki/.git/rebase-merge",
+		'no stopped rebase stays behind' );
+	is( _git( $tree, '-C', "$one/Wiki", 'status', '--porcelain' ),
+		q{}, 'the working tree of the clone is clean' );
+	is(
+		_git(
+			$tree, '-C', "$one/Wiki", 'rev-list',
+			'--count', 'HEAD', '--not', '--remotes'
+		),
+		"1\n",
+		'one commit stays unpushed'
+	);
+
+	# A ruleset of the library forbids a forced push, so no git
+	# call of the capture carries one (WIKI-CAPTURE-5).
+	my @forced = grep { /^\[[^]]*\] INFO: run: git .*(?:--force|\s-f\b)/ }
+	    split /\n/, $r->{stderr};
+	is( "@forced", q{}, 'no traced git command forces a push' );
+
+	my $page = _page(1);
+	my $log  = _git( $tree, '-C', $origin, 'log', '--format=%s' );
+	like( $log, qr/^note: \Q$page\E$/m,
+		'the origin holds the note of the peer' );
+	unlike(
+		_git( $tree, '-C', $origin, 'show', 'main:' . _page(1) ),
+		qr/the loser writes second/,
+		'the note of the loser stays local'
+	);
+    };
+
+subtest 'a detached HEAD commits and pushes nothing' => sub {
+	my ( $tree, $origin ) = _tree();
+	my $one = _checkout( $tree, $origin, 'c1' );
+
+	my $r = _run( $tree, $one, 'open', 'P', 'sess-1' );
+	is( $r->{exit_code}, 0, 'open exits 0' ) or diag $r->{stderr};
+
+	# A detached HEAD names no branch, so the push has no target
+	# (WIKI-CAPTURE-6). The commit still carries the durability.
+	_git( $tree, '-C', "$one/Wiki", 'checkout', '--quiet', '--detach' );
+	my $head = _git( $tree, '-C', $origin, 'rev-parse', 'main' );
+
+	_write( "$tree/obs.md", "Claim: the head is detached.\n" );
+	$r = _run( $tree, $one, 'note', _page(1), "$tree/obs.md" );
+	is( $r->{exit_code}, 0, 'note exits 0 with a detached HEAD' )
+	    or diag $r->{stderr};
+	is( $r->{stdout}, _page(1) . "\n", 'note writes the page name' );
+	like( $r->{stderr}, qr/detached HEAD, not pushing/, 'note warns' );
+
+	is( _git( $tree, '-C', "$one/Wiki", 'log', '-1', '--format=%s' ),
+		'note: ' . _page(1) . "\n", 'the commit carries the note' );
+	is( _git( $tree, '-C', "$one/Wiki", 'status', '--porcelain' ),
+		q{}, 'the working tree of the clone is clean' );
+	is( _git( $tree, '-C', $origin, 'rev-parse', 'main' ),
+		$head, 'the origin does not change' );
+};
 
 done_testing();

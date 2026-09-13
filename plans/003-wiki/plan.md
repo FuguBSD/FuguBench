@@ -2,16 +2,17 @@
 
 ## Status
 
-Package 1 landed: the module, `init`, and `open`. Packages 2 and 3 wait on
-nothing. Plan 004 builds on this plan: `hook SessionStart` and `hook SessionEnd`
-call the `init`, `open`, and `close` subcommands of this module. The hook
-subcommands `hook-start` and `hook-end` of the Workspace script are not part of
-this plan. The hook subtest of `t/ci/wiki.t` waits for plan 004 with them.
+Packages 1 and 2 landed: the module, `init`, `open`, `note`, `admit`, and
+`close`. Package 3 waits on nothing. Plan 004 builds on this plan:
+`hook SessionStart` and `hook SessionEnd` call the `init`, `open`, and `close`
+subcommands of this module. The hook subcommands `hook-start` and `hook-end` of
+the Workspace script are not part of this plan. The hook subtest of
+`t/ci/wiki.t` waits for plan 004 with them.
 
 The Workspace follows with a change of its own: its `.toolingrc` key and its
 callers of the script.
 
-Implements: WIKI-PAGES. Implements: WIKI-CAPTURE. Implements: WIKI-STATUS.
+Implements: WIKI-STATUS.
 
 Implements: CLI-VERBS. Implements: CLI-SANDBOX. This plan adds the `wiki` verb
 and its sandbox row. Both units stay `partial` until the last verb lands.
@@ -152,9 +153,9 @@ and `no undelivered candidate` when none exists. With no page it writes
    the union count, the save path, and the retry loop with the rename.
    Acceptance: `t/fugubench/wiki-init.t` passes, and the `open` subtests of
    `t/fugubench/wiki-push.t` pass.
-2. **note, admit, and close.** The append after one blank line, the `Closed:`
-   line, and the idempotence of `close`. Acceptance: `t/fugubench/wiki-push.t`
-   passes in full.
+2. **note, admit, and close.** Landed. The append after one blank line, the
+   `Closed:` line, and the idempotence of `close`. Acceptance:
+   `t/fugubench/wiki-push.t` passes in full.
 3. **status and candidates.** The report of the open sessions, the unpushed
    count, and the candidate list with the joined continuation lines. Acceptance:
    `t/fugubench/wiki.t` passes in full.

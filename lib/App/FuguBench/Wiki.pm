@@ -31,8 +31,8 @@ use Fugu::File;
 # App::FuguBench::Wiki - the wiki verb.
 #
 # The verb operates the learning library: a git repository of flat
-# pages, cloned into one checkout. The subcommands are init and open.
-# An unknown subcommand gives the usage error.
+# pages, cloned into one checkout. The subcommands are init, open,
+# note, admit, and close. An unknown subcommand gives the usage error.
 #
 # The library is <home of wiki.origin>/<wiki.dir>. A clone under
 # Projects/ holds a .toolingrc of its own without wiki.origin, so the
@@ -54,9 +54,14 @@ use Fugu::File;
 # reads it.
 
 # The subcommands of the verb. An unknown word gives the usage error.
+# note and admit share one body: they differ in the commit subject
+# only, so the entry carries the subject word.
 my %SUBCOMMAND = (
-	init => \&_init,
-	open => \&_open,
+	init  => \&_init,
+	open  => \&_open,
+	note  => sub ( $app, @args ) { return _append( $app, 'note',  @args ) },
+	admit => sub ( $app, @args ) { return _append( $app, 'admit', @args ) },
+	close => \&_close,
 );
 
 # The shape of a page name (WIKI-PAGES-1, WIKI-CONFINE-1). Pages stay
@@ -84,8 +89,10 @@ sub command ( $, $ )
 {
 	return {
 		summary => 'operate the learning library',
-		usage   => 'init | open <project> <session>',
-		run     => sub ( $app, @argv ) { return run( $app, @argv ) },
+		usage   => 'init | open <project> <session>'
+		    . ' | note <page> <file> | admit <page> <file>'
+		    . ' | close <session>',
+		run => sub ( $app, @argv ) { return run( $app, @argv ) },
 	};
 }
 
@@ -288,6 +295,106 @@ PAGE
 	return EXIT_SUCCESS;
 }
 
+# _append($app, $subject, @argv):
+#	Append the text of one file to one page, commit it, push it,
+#	and write the page name to standard output (WIKI-CAPTURE-1).
+#	note and admit share this body. They differ in the word of the
+#	commit subject only, and the caller gives that word.
+#
+#	An empty file is an error, because a capture with no text
+#	carries nothing. An absent page and an absent file are errors
+#	of the same kind: the caller names a thing that is not there.
+sub _append ( $app, $subject, @argv )
+{
+	return $app->cli->command_usage_error('wiki') if @argv != 2;
+	my ( $page, $file ) = @argv;
+
+	my ( $code, $dir ) = _library($app);
+	return $code if $code != EXIT_SUCCESS;
+	return EXIT_SUCCESS unless _have( $app, $dir );
+
+	# The name reaches the filesystem and git, so it passes the
+	# shape check before the path forms (CLI-PROGRAM-6).
+	my $path = _page_path( $app, $dir, $page )
+	    or return $app->cli->command_usage_error('wiki');
+
+	my $log = $app->cli->log;
+	unless ( -f $path ) {
+		$log->error( 'no such page: %s', $page );
+		return EXIT_ERROR;
+	}
+	unless ( -f $file ) {
+		$log->error( 'no such file: %s', $file );
+		return EXIT_ERROR;
+	}
+
+	my $text = Fugu::File->read($file);
+	unless ( defined $text && $text =~ /\S/ ) {
+		$log->error( 'no text in %s', $file );
+		return EXIT_ERROR;
+	}
+	$text .= "\n" unless $text =~ /\n\z/;
+
+	return EXIT_ERROR unless _add( $app, $path, $text );
+
+	# The caller can leave the .md suffix out, and git needs the
+	# name of the file. The path carries that name.
+	my $name = ( File::Spec->splitpath($path) )[2];
+
+	$code = _save( $app, $dir, $name, "$subject: $name" );
+	return $code if $code != EXIT_SUCCESS;
+
+	say $name;
+
+	return EXIT_SUCCESS;
+}
+
+# _close($app, @argv):
+#	Append the Closed: line to the page of one session, commit it,
+#	push it, and write the page name to standard output
+#	(WIKI-CAPTURE-2, WIKI-PAGES-3).
+#
+#	close carries no durability of its own: every observation
+#	reached a commit through note. So a page that holds the line
+#	already, and a session that has no page, both report on
+#	standard error and write no result line. A session that runs no
+#	campaign opens no page, and that is normal.
+sub _close ( $app, @argv )
+{
+	return $app->cli->command_usage_error('wiki') if @argv != 1;
+	my ($session) = @argv;
+
+	return $app->cli->command_usage_error('wiki')
+	    unless _token( $app, 'session', $session );
+
+	my ( $code, $dir ) = _library($app);
+	return $code if $code != EXIT_SUCCESS;
+	return EXIT_SUCCESS unless _have( $app, $dir );
+
+	my $log  = $app->cli->log;
+	my $page = _page_of_session( $dir, $session );
+	unless ($page) {
+		$log->notice('no page for this session, nothing to do');
+		return EXIT_SUCCESS;
+	}
+
+	my $path = "$dir/$page";
+	if ( ( Fugu::File->read($path) // q{} ) =~ /^Closed:/m ) {
+		$log->notice( 'already closed: %s', $page );
+		return EXIT_SUCCESS;
+	}
+
+	my $now = strftime( '%Y-%m-%dT%H:%M:%SZ', gmtime );
+	return EXIT_ERROR unless _add( $app, $path, "Closed: $now\n" );
+
+	$code = _save( $app, $dir, $page, "close: $page" );
+	return $code if $code != EXIT_SUCCESS;
+
+	say $page;
+
+	return EXIT_SUCCESS;
+}
+
 # _token($app, $what, $value):
 #	True when one token holds the shape of WIKI-OPEN-5. A token
 #	that fails gives a message that names it, and the caller then
@@ -359,6 +466,25 @@ sub _page_of_session ( $dir, $session )
 	}
 
 	return;
+}
+
+# _add($app, $path, $text):
+#	Append the text to one page, after one blank line
+#	(WIKI-CAPTURE-1). The method returns 0 after a failure, and it
+#	reports that failure itself.
+#
+#	Every page that this verb writes ends with a newline, so one
+#	newline in front of the text gives the blank line. The read
+#	and the write take the whole page, because a page holds a few
+#	thousand bytes.
+sub _add ( $app, $path, $text )
+{
+	my $old = Fugu::File->read($path);
+	return 1 if defined $old && Fugu::File->write( $path, "$old\n$text" );
+
+	$app->cli->log->error( 'cannot append to %s', $path );
+
+	return 0;
 }
 
 # _branch($app, $dir):
