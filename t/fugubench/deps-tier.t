@@ -611,6 +611,54 @@ sub _bin_opt ( $url, $opt, %file )
 		'a failed tier check leaves no install directory' );
 }
 
+# The digest of an entry takes its check at the download of that
+# entry, so a mismatch on a later entry leaves an earlier one
+# installed (DEPS-TIER-2)
+{
+	my $own = "$tree/home-two";
+	make_path($own);
+
+	my $first  = _release('two-first') . '/tool-1.0.0';
+	my $second = _release('two-second') . '/tool-1.0.0';
+	my $dir    = _checkout(
+		'Darwin.txt' => "test bin first $first\n"
+		    . "test bin second $second\n",
+		'SHA256.txt' => "SHA256 ($first) = $ASSET\n"
+		    . "SHA256 ($second) = $WRONG\n",
+	);
+	my $r =
+	    _child_home( $own, '-C', $dir, 'deps', '--os', 'Darwin', 'test' );
+	is( $r->{exit_code}, 1, 'a digest mismatch on a later entry exits 1' );
+	like(
+		$r->{stderr}, qr/does not match its recorded digest/,
+		'the message names the failed check'
+	);
+	ok( -e "$own/.local/bin/first",
+		'the entry ahead of the mismatch stays installed' );
+	ok( !-e "$own/.local/bin/second",
+		'the entry of the failed check installs nothing' );
+}
+
+# The verb makes the install directory before the first download, so
+# a digest mismatch on the first bin entry leaves that directory
+# behind (DEPS-TIER-2)
+{
+	my $own = "$tree/home-mismatch";
+	make_path($own);
+
+	my $url = _release('mismatch-first') . '/tool-1.0.0';
+	my $dir = _checkout(
+		'Darwin.txt' => "test bin tool $url\n",
+		'SHA256.txt' => "SHA256 ($url) = $WRONG\n",
+	);
+	my $r =
+	    _child_home( $own, '-C', $dir, 'deps', '--os', 'Darwin', 'test' );
+	is( $r->{exit_code}, 1, 'a digest mismatch on the first entry exits 1' );
+	ok( -d "$own/.local/bin",
+		'a mismatch on the first entry leaves the install directory' );
+	ok( !-e "$own/.local/bin/tool", 'the entry installs nothing' );
+}
+
 # The fetch verb takes the file and then the URL, and it is silent on
 # success (DEPS-FETCH-2)
 {

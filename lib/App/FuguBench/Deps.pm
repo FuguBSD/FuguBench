@@ -814,8 +814,10 @@ sub _modules ( $ctx, @modules )
 #
 #	The digest of an entry takes its check in the install loop, at
 #	the download of that entry. A mismatch there leaves an earlier
-#	entry of the set installed (DEPS-TIER-2). The two loops come
-#	from the synced scripts/deps, which CLI-CONFORMANCE-2 pins.
+#	entry of the set installed, and a mismatch on the first entry
+#	leaves the new install directory behind (DEPS-TIER-2). The two
+#	loops come from the synced scripts/deps, which
+#	CLI-CONFORMANCE-2 pins.
 sub _bins ( $ctx, @bins )
 {
 	my $app = $ctx->{app};

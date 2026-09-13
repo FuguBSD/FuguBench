@@ -245,8 +245,10 @@ install directory.
 
 The digest of an entry takes its check at the download of that entry,
 which the install of that entry follows. A mismatch on a later entry
-leaves an earlier one installed. The two loops come from the synced
-F<scripts/deps>, and the dry-run trace holds the verb to that order.
+leaves an earlier one installed, and a mismatch on the first C<bin>
+entry leaves the new install directory behind. The two loops come
+from the synced F<scripts/deps>, and the dry-run trace holds the verb
+to that order.
 
 A C<pkg> entry reaches the package manager of the platform:
 C<pkg_add> on OpenBSD, C<apt-get install -y> under C<sudo> on Linux,
