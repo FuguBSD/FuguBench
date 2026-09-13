@@ -8,6 +8,7 @@ App::FuguBench::Hook - the hook verb of fugubench
     fugubench hook SessionEnd < payload.json
     fugubench hook WorktreeCreate < payload.json
     fugubench hook WorktreeRemove < payload.json
+    fugubench [-C <root>] hook install
 
 =head1 DESCRIPTION
 
@@ -16,8 +17,10 @@ harness writes a JSON payload to standard input, and the verb reads
 that payload itself, so no hook command needs C<jq>.
 
 The events are C<SessionStart>, C<SessionEnd>, C<WorktreeCreate>, and
-C<WorktreeRemove>. A word outside the four gives the usage error, and
-so does an argument after the event.
+C<WorktreeRemove>. The word C<install> names the subcommand that
+writes the entries of those four events into the settings file of the
+checkout. Another word gives the usage error, and so does an argument
+after the word.
 
 This verb and the trace verb hold the Claude Code assumptions of the
 program. Every other verb is agent-agnostic. The payload shape lives
@@ -90,14 +93,52 @@ split serves the hint alone, and it finds no checkout. Without the
 segment, and without a checkout that names the value, the verb prints
 the path alone.
 
+=head2 THE INSTALLATION
+
+C<install> writes F<.claude/settings.json> of the checkout: the four
+entries under C<hooks>, and C<head> at C<worktree.baseRef>. A worktree
+starts at the local HEAD. Without that value the built-in creation
+branches from C<origin/main> and skips the bootstrap.
+
+The subcommand answers no event, so it reads no payload, and it takes
+the checkout of the dispatcher. C<-C E<lt>dirE<gt>> names the root,
+and without it the walk starts at the current directory.
+
+Each entry runs the shim of the checkout,
+C<"$CLAUDE_PROJECT_DIR/scripts/fugubench" hook E<lt>eventE<gt>>, and
+nothing else. Each one carries an explicit timeout: 120 seconds for
+C<WorktreeCreate>, 60 for C<WorktreeRemove>, 60 for C<SessionStart>,
+and 30 for C<SessionEnd>. Without one, the C<SessionEnd> hooks share a
+budget of 1.5 seconds, and a commit with a push does not fit it.
+
+The writer keeps every key that it does not own, at the top level and
+under C<hooks>. It replaces the list of each of the four events, and
+it leaves every other event as it is. The keys reach the file in
+sorted order, with an indent of two spaces and a final newline, so a
+second run writes the same bytes and causes no change.
+
+A file that does not parse is a failure, and the subcommand then
+writes nothing. A C<hooks> value or a C<worktree> value that is no
+object is a failure too. The operator repairs the file, and no run of
+the subcommand destroys it.
+
 =head2 command
 
 C<command($verb)> returns the entry of the L<Fugu::CLI> table. The
 module holds one verb, so it ignores the name.
 
+=head2 entries
+
+C<entries> returns a reference to a hash of the four event names. Each
+value is one list with one matcher-less group, and the group holds one
+entry. An entry holds C<type>, C<command>, and C<timeout>, and no
+C<statusMessage>: the harness names the event itself. The doctor reads
+the same hash, so the report of an entry and the write of an entry
+never disagree.
+
 =head1 RETURN VALUES
 
-C<command> returns a hash reference.
+C<command> and C<entries> return a hash reference.
 
 The verb returns the exit codes of L<Fugu::CLI>. A session event and
 C<WorktreeRemove> return 0 after every payload. C<WorktreeCreate>
@@ -106,10 +147,16 @@ no worktree, when it names no C<cwd>, and when no F<.toolingrc> sits
 above that C<cwd>. An unknown event, and an argument after an event,
 give the usage error and return 2.
 
+C<install> returns 0. It returns 1 when the settings file does not
+read, when it does not parse, when a key of it holds no object, and
+when the write fails. It returns 3 when no F<.toolingrc> sits above
+the start of the walk.
+
 =head1 SEE ALSO
 
 L<App::FuguBench>, L<App::FuguBench::Checkout>,
-L<App::FuguBench::Wiki>, L<App::FuguBench::Worktree>, L<Fugu::CLI>
+L<App::FuguBench::Wiki>, L<App::FuguBench::Worktree>, L<Fugu::CLI>,
+L<Fugu::File>
 
 =head1 AUTHORS
 

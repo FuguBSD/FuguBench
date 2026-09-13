@@ -156,8 +156,9 @@ L<App::FuguBench::Traces> holds the list and the reason of each path.
 
 C<hook> runs the other verbs in its own process, so its row pledges
 the promises of C<wiki> and of C<worktree> together. Those verbs run
-git, so the row unveils nothing. The verb reads the checkout of the
-payload, so the row needs no early root.
+git, so the row unveils nothing. The C<install> subcommand writes one
+file of its own, and the write promises of the row cover that write.
+The row names no unveil list, so no walk runs in front of the verb.
 
 =head1 RETURN VALUES
 

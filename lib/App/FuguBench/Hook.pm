@@ -27,6 +27,7 @@ use File::Spec ();
 use JSON::PP   ();
 
 use Fugu::CLI qw(EXIT_SUCCESS EXIT_ERROR);
+use Fugu::File;
 
 use App::FuguBench::Checkout;
 use App::FuguBench::Wiki;
@@ -59,13 +60,20 @@ use App::FuguBench::Worktree;
 # non-zero code to a warning and returns zero (HOOK-EVENTS-3).
 # WorktreeCreate returns the code of worktree create, because the
 # harness needs the path of the worktree.
+#
+# The install subcommand writes the entries of those four events into
+# the settings file of the checkout (HOOK-INSTALL-1). It reads no
+# payload, and it takes the checkout of the dispatcher.
 
-# The events of the verb (HOOK-EVENTS-1).
+# The events of the verb (HOOK-EVENTS-1). Each value holds the
+# handler of the event and the timeout of its settings entry, in
+# seconds (HOOK-INSTALL-3). One table holds the four events, so the
+# dispatch and the installer can never name a different set.
 my %EVENT = (
-	SessionStart   => \&_session_start,
-	SessionEnd     => \&_session_end,
-	WorktreeCreate => \&_worktree_create,
-	WorktreeRemove => \&_worktree_remove,
+	SessionStart   => [ \&_session_start,   60 ],
+	SessionEnd     => [ \&_session_end,     30 ],
+	WorktreeCreate => [ \&_worktree_create, 120 ],
+	WorktreeRemove => [ \&_worktree_remove, 60 ],
 );
 
 # The shape of a project name that comes from a path (WIKI-OPEN-5).
@@ -73,11 +81,24 @@ my %EVENT = (
 # starts with a dash reaches git as an option.
 my $PROJECT = qr{\A[A-Za-z0-9][A-Za-z0-9._-]*\z};
 
-# The decoder of one payload. It takes the bytes of the payload, and
-# it decodes the UTF-8 itself. An :encoding layer loads the
+# The command of each settings entry (HOOK-INSTALL-2). The harness
+# expands CLAUDE_PROJECT_DIR, and the quotes hold a root that carries
+# a space. The command names the shim and the event, and nothing
+# else, so no entry needs jq (D-07).
+my $SHIM = '"$CLAUDE_PROJECT_DIR/scripts/fugubench" hook ';
+
+# The JSON of the verb: the decoder of one payload, and the decoder
+# and the encoder of the settings file. It takes the bytes and it
+# handles the UTF-8 itself. An :encoding layer loads the
 # PerlIO::encoding extension at the first read, and no row of the
 # sandbox gives a promise for the load of a shared object.
-my $JSON = JSON::PP->new->utf8;
+#
+# The encoder sorts the keys, indents with two spaces, and writes one
+# space after a colon and none in front of it. Sorted keys make the
+# second install byte-equal to the first one, and prettier writes
+# that same shape.
+my $JSON =
+    JSON::PP->new->utf8->canonical->indent->indent_length(2)->space_after;
 
 # App::FuguBench::Hook->command($verb):
 #	The entry of the Fugu::CLI table. The module holds one verb,
@@ -86,15 +107,19 @@ sub command ( $, $ )
 {
 	return {
 		summary => 'answer one Claude Code hook event',
-		usage   => 'SessionStart | SessionEnd | WorktreeCreate'
-		    . ' | WorktreeRemove',
+		usage   => 'install | SessionStart | SessionEnd'
+		    . ' | WorktreeCreate | WorktreeRemove',
 		run => sub ( $app, @argv ) { return _run( $app, @argv ) },
 	};
 }
 
 # _run($app, @argv):
-#	The body of the verb. It reads the event as its first
-#	argument, and it takes no other argument.
+#	The body of the verb. It reads one word as its first argument,
+#	and it takes no other argument. The word install names the
+#	subcommand, and every other word names an event.
+#
+#	The subcommand comes in front of the payload read, because it
+#	answers no event and reads no standard input.
 #
 #	The two early exits answer every event with the code zero. A
 #	payload that does not parse warns (HOOK-EVENTS-2), and a
@@ -104,15 +129,20 @@ sub command ( $, $ )
 #	of them opens a page of its own.
 sub _run ( $app, @argv )
 {
-	my $word  = shift @argv;
-	my $event = defined $word ? $EVENT{$word} : undef;
-	return $app->cli->command_usage_error('hook') if !$event || @argv;
+	my $word = shift @argv;
+	return $app->cli->command_usage_error('hook')
+	    if !defined $word || @argv;
+
+	return _install($app) if $word eq 'install';
+
+	my $event = $EVENT{$word};
+	return $app->cli->command_usage_error('hook') unless $event;
 
 	my $payload = _payload($app);
 	return EXIT_SUCCESS unless $payload;
 	return EXIT_SUCCESS if defined $payload->{agent_id};
 
-	return $event->( $app, $payload );
+	return $event->[0]->( $app, $payload );
 }
 
 # _payload($app):
@@ -407,6 +437,127 @@ sub _split ( $path, $base )
 	return unless length $name;
 
 	return ( substr( $path, 0, $at ), $name );
+}
+
+# App::FuguBench::Hook->entries:
+#	The settings entries of the four events, as a reference to a
+#	hash of the event names. Each value is one list with one
+#	matcher-less group, and the group holds one entry.
+#
+#	An entry holds three keys: the type, the command, and the
+#	timeout of the event (HOOK-INSTALL-3). It carries no
+#	statusMessage, because the harness names the event itself.
+#
+#	The doctor reads the same hash, so the report of an entry and
+#	the write of an entry never disagree.
+sub entries ($)
+{
+	my %entries;
+	for my $event ( keys %EVENT ) {
+		my $entry = {
+			type    => 'command',
+			command => $SHIM . $event,
+			timeout => $EVENT{$event}[1],
+		};
+		$entries{$event} = [ { hooks => [$entry] } ];
+	}
+
+	return \%entries;
+}
+
+# _install($app):
+#	Write the four entries and the base reference into
+#	.claude/settings.json of the checkout, and return the exit
+#	code (HOOK-INSTALL-1).
+#
+#	The subcommand reads no payload, so it takes the checkout of
+#	the dispatcher. An operator runs it by hand, and -C names the
+#	root (CLI-CHECKOUT-1).
+#
+#	The method keeps every key that it does not own, at the top
+#	level and under hooks. It replaces the list of each event of
+#	%EVENT, and it leaves every other event as it is, so the
+#	settings of the operator survive the write.
+#
+#	baseRef takes the value head, because a worktree starts at the
+#	local HEAD (HOOK-INSTALL-4). Without that value, the built-in
+#	creation branches from origin/main and skips the bootstrap.
+#
+#	The keys reach the file in sorted order, so a second run writes
+#	the same bytes and causes no change (HOOK-INSTALL-1).
+sub _install ($app)
+{
+	my $checkout = $app->checkout;
+	return Fugu::CLI::EXIT_CONFIG_ERROR() unless $checkout;
+
+	my $dir  = File::Spec->catdir( $checkout->root, '.claude' );
+	my $path = File::Spec->catfile( $dir, 'settings.json' );
+
+	my $settings = _settings( $app, $path );
+	return EXIT_ERROR unless $settings;
+
+	my $hooks = _object( $app, $settings, 'hooks', $path );
+	return EXIT_ERROR unless $hooks;
+
+	my $entries = __PACKAGE__->entries;
+	$hooks->{$_} = $entries->{$_} for keys %$entries;
+
+	my $worktree = _object( $app, $settings, 'worktree', $path );
+	return EXIT_ERROR unless $worktree;
+	$worktree->{baseRef} = 'head';
+
+	return EXIT_ERROR unless Fugu::File->ensure_dir($dir);
+
+	# The encoder ends the text with a newline of its own, after
+	# the last brace.
+	return EXIT_ERROR
+	    unless Fugu::File->write_atomic( $path, $JSON->encode($settings) );
+
+	return EXIT_SUCCESS;
+}
+
+# _settings($app, $path):
+#	The settings of one file, as a hash reference. An absent file
+#	gives an empty hash, and the subcommand then writes a new file.
+#
+#	The method reports and returns undef when the file does not
+#	read, and when it holds no JSON object. An empty file holds
+#	none, and so does a file that lost a brace. The subcommand then
+#	writes nothing, and the operator repairs the file.
+sub _settings ( $app, $path )
+{
+	return {} unless -e $path;
+
+	my $text = Fugu::File->read($path);
+	unless ( defined $text ) {
+		$app->cli->log->error( 'cannot read %s', $path );
+		return;
+	}
+
+	my $settings = eval { $JSON->decode($text) };
+	return $settings if ref $settings eq 'HASH';
+
+	$app->cli->log->error( '%s holds no JSON object', $path );
+
+	return;
+}
+
+# _object($app, $settings, $key, $path):
+#	The object under one key of the settings. The method makes an
+#	empty object when the file omits the key, and it reports and
+#	returns undef when the key holds another kind of value.
+#
+#	A hooks key of another kind belongs to no settings file that
+#	this subcommand can extend. The write then stops, and it
+#	destroys no file of the operator.
+sub _object ( $app, $settings, $key, $path )
+{
+	my $value = $settings->{$key} //= {};
+	return $value if ref $value eq 'HASH';
+
+	$app->cli->log->error( '%s: the %s key holds no object', $path, $key );
+
+	return;
 }
 
 1;

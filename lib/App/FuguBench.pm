@@ -85,8 +85,9 @@ my @VERBS = (
 #
 # `hook` runs the other verbs in its own process, so its row pledges
 # the promises of `wiki` and of `worktree` together. Those verbs run
-# git, so the row unveils nothing. The verb reads the checkout of the
-# payload, so the row needs no early root.
+# git, so the row unveils nothing. The `install` subcommand writes one
+# file of its own, and the write promises of the row cover that write.
+# The row names no unveil list, so no walk runs in front of the verb.
 my %SANDBOX = (
 	hook => {
 		promises => 'stdio rpath wpath cpath fattr proc exec inet dns'
