@@ -20,10 +20,27 @@ in the trace of each download.
 The verb reads no checkout, so it runs in a tree with no
 F<.toolingrc>.
 
+=head2 THE URL
+
+L<Fugu::Curl> puts the URL last on the command line of the
+downloader, and it writes no C<--> separator ahead of it. A URL that
+starts with a dash would reach the downloader as an option, so the
+verb holds the URL to a shape check first. The URL starts with a
+scheme, and a scheme starts with a letter, so one rule covers both
+shapes.
+
 =head2 command
 
 C<command($verb)> returns the entry of the L<Fugu::CLI> table. The
 module holds one verb, so it ignores the name.
+
+=head2 check_url
+
+C<check_url($app, $url, $where)> holds one URL to that shape. It
+returns 1 for a URL that passes, and 0 for one that does not, which
+it reports. C<$where> names the source of the URL in the message. The
+C<deps> verb calls it over each manifest URL, so one check serves
+both verbs.
 
 =head1 FAILURE
 
@@ -40,7 +57,9 @@ three commands.
 
 C<command> returns a hash reference. Its body returns 0 after the
 download, and 1 after a failed one. A command line that holds other
-than two arguments is a usage error, and it returns 2.
+than two arguments is a usage error, and it returns 2. A URL that
+fails the shape check is an invalid argument, and it returns 2 as
+well.
 
 =head1 SEE ALSO
 

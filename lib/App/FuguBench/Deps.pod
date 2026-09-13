@@ -64,9 +64,15 @@ path. A plain URL takes none. A C<pkg> name and a C<cpan> name reach
 a package manager, so neither starts with a dash, and neither is a
 URL.
 
-A download URL names a file, and it holds no parenthesis and no
-space, which the line format of F<deps/SHA256.txt> reserves. A
-command name becomes a file name in the install directory, and an
+A download URL starts with a scheme, and it names a file. It holds
+no parenthesis and no space, which the line format of
+F<deps/SHA256.txt> reserves. The downloader takes the URL as one
+argument, with no C<--> separator ahead of it. A URL that starts
+with a dash would reach the downloader as an option, and a scheme
+starts with a letter. The C<fetch> verb runs the same check over its
+own URL.
+
+A command name becomes a file name in the install directory, and an
 archive path becomes one in a temporary directory. tar and unzip read
 a leading dash as an option, so neither name starts with one, and an
 archive path holds no empty and no parent segment.

@@ -37,9 +37,8 @@ runs in-process through Fugu LIB-SIGNIFY with the engine of Fugu LIB-ED25519.
   of CLI-CONFORMANCE-2.
 - **DEPS-MANIFEST-7** — A `pkg` name and a `cpan` name must not start with a
   dash, and neither may be a URL. Both reach a package manager, which owns its
-  own check. A `dist` URL and a `bin` URL must start with a scheme, because the
-  downloader reads the URL as one argument. A name that starts with a dash would
-  reach the downloader as an option.
+  own check. A `dist` URL and a `bin` URL must take the shape check of
+  DEPS-FETCH-4, because each one reaches the downloader.
 - **DEPS-MANIFEST-8** — A `dist` name is one URL. A `bin` name holds the command
   name, the URL, and, for an archive, the path of the file in the archive. An
   archive URL ends in `.tar.gz`, `.tgz`, or `.zip`, and it needs the path. A
@@ -246,3 +245,9 @@ the install path must not.
 - **DEPS-FETCH-3** — A probe for a signed manifest must read a 404 as the normal
   answer, and the verb must write nothing about it. A connection failure is a
   failure of the run.
+- **DEPS-FETCH-4** — A URL that reaches the downloader must start with a scheme.
+  Fugu LIB-CURL puts the URL last, and it writes no `--` separator. A URL that
+  starts with a dash then reaches the downloader as an option. A scheme starts
+  with a letter, so one rule covers both shapes. The `fetch` verb and `deps`
+  must run one shared check (CLI-PROGRAM-6). A bad URL on the `fetch` command
+  line is an invalid argument, and the verb must return 2.

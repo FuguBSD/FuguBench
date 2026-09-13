@@ -580,6 +580,32 @@ sub _bin ( $url, %file )
 	like( $r->{stderr}, qr{\Q$base/nosuch\E}, 'the message names the URL' );
 }
 
+# The fetch verb holds its URL to the shape that the downloader
+# allows, because Fugu::Curl writes no '--' separator (DEPS-FETCH-4,
+# CLI-PROGRAM-6)
+{
+	# The dispatcher reads a leading dash as an option, so '--'
+	# ends the option parsing and the URL reaches the body.
+	my $out  = "$tree/unwanted";
+	my @case = (
+		[ 'a URL that starts with a dash', '-K/tmp/evilrc', '--' ],
+		[ 'a URL with no scheme',          'not-a-url' ],
+	);
+	for my $case (@case) {
+		my ( $want, $url, @lead ) = @$case;
+		my $r = _child( 'fetch', @lead, $out, $url );
+		is( $r->{exit_code}, 2, "$want exits 2" );
+		like(
+			$r->{stderr},
+			qr/the URL must start with a scheme/,
+			"$want names the rule"
+		);
+		like( $r->{stderr}, qr/\Q$url\E/,
+			"$want names the URL" );
+		ok( !-e $out, "$want downloads nothing" );
+	}
+}
+
 # Other than two arguments is a usage error (CLI-PROGRAM-3)
 {
 	for my $argv ( ["$tree/one"], [ "$tree/one", 'http://a/b', 'extra' ] ) {

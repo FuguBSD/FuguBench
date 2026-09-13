@@ -27,6 +27,8 @@ use File::Spec  ();
 use File::Temp  ();
 use POSIX       qw(uname);
 
+use App::FuguBench::Fetch;
+
 use Fugu::CLI qw(EXIT_SUCCESS EXIT_ERROR);
 use Fugu::Curl;
 use Fugu::File;
@@ -423,10 +425,8 @@ sub _check_entry ( $app, $type, $name, $where, $line )
 #	Hold one download URL to the shapes that the downloader and
 #	the digest file allow.
 #
-#	The URL reaches the downloader as one argument, so it must
-#	start with a scheme (DEPS-MANIFEST-7). A name that starts with
-#	a dash would reach the downloader as an option, and a scheme
-#	starts with a letter.
+#	The scheme check is the shared one of the fetch verb
+#	(DEPS-FETCH-4), because both reach one downloader.
 #
 #	The URL becomes a key of deps/SHA256.txt, whose line format
 #	reserves the parenthesis and the space (DEPS-TIER-12). It must
@@ -435,14 +435,8 @@ sub _check_entry ( $app, $type, $name, $where, $line )
 sub _check_url ( $app, $url, $where )
 {
 	my $log = $app->cli->log;
-	unless ( $url =~ m{\A[a-z][a-z0-9+.-]*://}i ) {
-		$log->error(
-			'%s: the URL must start with a scheme, because the'
-			    . ' downloader reads it as one argument: %s',
-			$where, $url
-		);
-		return 0;
-	}
+	return 0
+	    unless App::FuguBench::Fetch::check_url( $app, $url, $where );
 
 	my ($file) = $url =~ m{([^/]+)\z};
 	if ( !defined $file || $file eq '' ) {
