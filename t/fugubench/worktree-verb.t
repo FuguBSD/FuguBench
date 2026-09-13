@@ -412,6 +412,62 @@ subtest 'remove takes a lock, debris, and a removal by hand' => sub {
 		qr{worktrees/byhand}, 'remove prunes the worktree record' );
 };
 
+subtest 'remove takes debris while the main checkout holds work' => sub {
+	my ( $dir, $real ) = _repo();
+	my $base = "$real/.claude/worktrees";
+
+	# git knows no debris, so the discovery of git walks up from
+	# it to the main checkout. The main checkout here holds both
+	# causes of WT-REMOVE-2, and neither one belongs to the debris
+	# (WT-REMOVE-4).
+	_git( '-C', $dir, 'checkout', '--quiet', '-b', 'work' );
+	_write( "$dir/g.txt", "new\n" );
+	_git( '-C', $dir, 'add',      '-A' );
+	_git( '-C', $dir, 'commit',   '--quiet', '-m', 'a commit of the root' );
+	_git( '-C', $dir, 'checkout', '--quiet', 'main' );
+	_write( "$dir/f.txt", "changed\n" );
+
+	make_path("$base/debris");
+	_write( "$base/debris/f.txt", "x\n" );
+
+	my $result = _run( $dir, 'remove', 'debris' );
+	is( $result->{exit_code}, 0,
+		'remove takes debris under a dirty root (WT-REMOVE-4)' )
+	    or diag $result->{stderr};
+	unlike( $result->{stderr}, qr/work at risk/,
+		'no state of the main checkout stops the removal' );
+	ok( !-e "$base/debris", 'the debris is gone' );
+	is( Fugu::File->read("$dir/f.txt"),
+		"changed\n", 'the change of the main checkout stays' );
+	is_deeply( [ _branches($dir) ],
+		[ 'main', 'work' ], 'remove keeps each branch of the root' );
+};
+
+subtest 'remove frees the name after a killed create' => sub {
+	my ( $dir, $real ) = _repo();
+	my $base = "$real/.claude/worktrees";
+
+	# A killed create leaves the branch and a directory that git
+	# does not know. git reads the branch of the main checkout in
+	# that directory, so remove must read none. The branch must
+	# go, or the name stays locked (WT-REMOVE-4).
+	_git( '-C', $dir, 'branch', 'killed' );
+	make_path("$base/killed");
+	_write( "$base/killed/f.txt", "x\n" );
+
+	my $result = _run( $dir, 'remove', 'killed' );
+	is( $result->{exit_code}, 0, 'remove takes the debris (WT-SAFETY-2)' )
+	    or diag $result->{stderr};
+	is_deeply( [ _branches($dir) ],
+		['main'],
+		'remove deletes the branch of the killed create' );
+
+	$result = _run( $dir, 'create', 'killed' );
+	is( $result->{exit_code}, 0, 'create takes the name again' )
+	    or diag $result->{stderr};
+	ok( -e "$base/killed/.git", 'the second create makes the worktree' );
+};
+
 subtest 'remove refuses work at risk, and --force overrides' => sub {
 	my ( $dir, $real ) = _repo();
 	my $base = "$real/.claude/worktrees";

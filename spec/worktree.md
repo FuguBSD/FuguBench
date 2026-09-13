@@ -54,7 +54,9 @@ comes from Workspace WS-WORKTREE and Workspace WS-BOOTSTRAP.
   so its count reads its own HEAD alone.
 - **WT-REMOVE-4** — The verb must remove a locked worktree, debris from a killed
   create, and a worktree that a user deleted by hand. A second run causes no
-  change.
+  change. git knows no debris, and its discovery walks up from the debris to the
+  checkout above it. So the verb must trust no answer of git about a directory
+  that git does not know.
 - **WT-REMOVE-5** — The verb must never delete the branch `main`, and never the
   branch that the main checkout has checked out.
 - **WT-REMOVE-6** — The verb must resolve symbolic links, and it must refuse a

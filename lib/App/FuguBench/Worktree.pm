@@ -168,6 +168,20 @@ sub _setup ($app)
 	return ( EXIT_SUCCESS, $root, File::Spec->catdir( $root, $dir ) );
 }
 
+# _known($dir):
+#	True when git knows the directory as a checkout of its own. A
+#	linked worktree holds a .git file, and a main checkout holds a
+#	.git directory.
+#
+#	Debris from a killed create holds neither. The discovery of
+#	git then walks up from it to the checkout above it, so every
+#	answer of `git -C <debris>` is an answer about that checkout.
+#	No caller must trust one.
+sub _known ($dir)
+{
+	return -e "$dir/.git" ? 1 : 0;
+}
+
 # _create($app, @argv):
 #	Make one worktree of the checkout, and write its path to
 #	standard output as the only line (WT-CREATE-5).
@@ -262,7 +276,7 @@ sub _again ( $app, $root, $name, $wt )
 {
 	my $log = $app->cli->log;
 	my $branch =
-	    -e "$wt/.git"
+	      _known($wt)
 	    ? _capture( $app, 'git', '-C', $wt, 'branch', '--show-current' )
 	    : undef;
 	unless ( defined $branch && $branch eq $name ) {
@@ -394,8 +408,9 @@ sub _remove ( $app, @argv )
 	}
 
 	# The guard of D-06: the work inside the worktree must survive.
-	# Debris from a killed create holds no session work, and no
-	# risk walk of a directory that git does not know finds one.
+	# Debris from a killed create is no checkout, so the walk reads
+	# no state of it. A clone below it is a repository of its own,
+	# and the walk reads that one.
 	unless ( $app->cli->option('force') ) {
 		my @risk = _risks( $app, $resolved );
 		if (@risk) {
@@ -409,11 +424,15 @@ sub _remove ( $app, @argv )
 		}
 	}
 
-	# The branch that the worktree has checked out, when git reads
-	# one. Debris from a killed create has none, and the name that
-	# create gives the branch is then the right one.
-	my $branch = _capture( $app, 'git', '-C', $resolved, 'branch',
-		'--show-current' );
+	# The branch that the worktree has checked out. git knows no
+	# debris of a killed create, so it reads the branch of the
+	# checkout above it. The name that create gives the branch is
+	# the right one there.
+	my $branch =
+	    _known($resolved)
+	    ? _capture( $app, 'git', '-C', $resolved, 'branch',
+		'--show-current' )
+	    : undef;
 	$branch = $name unless defined $branch && length $branch;
 
 	return EXIT_ERROR unless _take( $app, $root, $resolved );
@@ -547,9 +566,14 @@ sub _risks ( $app, $wt )
 #	repository that it finds, because the content of a clone is
 #	the business of that clone. It skips scratch/ and a nested
 #	worktree directory, which hold no session work.
+#
+#	Debris from a killed create is no repository, so the list
+#	holds it only when git knows it. A clone that a partial
+#	bootstrap left inside it is a repository, and the walk finds
+#	that one.
 sub _repos_in ($wt)
 {
-	my @repos = ($wt);
+	my @repos = _known($wt) ? ($wt) : ();
 	File::Find::find( {
 			no_chdir   => 1,
 			preprocess => sub {
@@ -567,7 +591,7 @@ sub _repos_in ($wt)
 					$File::Find::prune = 1;
 					return;
 				}
-				return unless -e "$name/.git";
+				return unless _known($name);
 				push @repos, $name;
 				$File::Find::prune = 1;
 
