@@ -11,10 +11,10 @@
 #
 # A stub downloader on a temporary PATH serves the pack, so no case
 # reaches the network. Each case sets HOME to its own temporary tree,
-# reads no operator home, and writes nowhere else. The pack build
-# carries PERL5LIB, because scripts/dist and scripts/pack load the
-# installed Fugu. No other child carries it: the packed file must
-# need no installed Fugu.
+# reads no operator home, and writes nowhere else. A child that loads
+# the checkout carries PERL5LIB, because CI installs Fugu in a tree
+# that PERL5LIB alone names. No run of the packed file carries it:
+# the packed file must need no installed Fugu.
 
 use v5.34;
 use warnings;
@@ -44,6 +44,12 @@ my $program = "$root/bin/fugubench";
 # The version of the pack under test. No release holds it, so no
 # stamp of a checkout passes a case by accident.
 my $VERSION = '9.9.9';
+
+# Fugu::Process gives a child the named environment alone, and CI
+# reaches the installed Fugu through PERL5LIB. Every child that loads
+# the checkout therefore carries it. Without it such a child fails to
+# compile, and perl exits 2, which is the usage code of the program.
+my %LIB = defined $ENV{PERL5LIB} ? ( PERL5LIB => $ENV{PERL5LIB} ) : ();
 
 # The directory of the running perl. The packed file starts with
 # `#!/usr/bin/env perl`, so the PATH of a shim run must name a perl.
@@ -143,12 +149,7 @@ sub _pack ()
 			'--out', $dir
 		],
 		cwd => $root,
-		env => _env(
-			HOME => $dir,
-			defined $ENV{PERL5LIB}
-			? ( PERL5LIB => $ENV{PERL5LIB} )
-			: ()
-		),
+		env => _env( HOME => $dir, %LIB ),
 	);
 	die "cannot run scripts/pack: $r->{error}\n" if defined $r->{error};
 	die "scripts/pack exited $r->{exit_code}: $r->{stderr}\n"
@@ -159,8 +160,9 @@ sub _pack ()
 }
 
 # _run($home, $path, @argv):
-#	Run one program as a child, with HOME and the current
-#	directory in one temporary tree.
+#	Run one packed file as a child, with HOME and the current
+#	directory in one temporary tree. The child carries no
+#	PERL5LIB, so it reads no installed Fugu.
 sub _run ( $home, $path, @argv )
 {
 	my $r = Fugu::Process->run(
@@ -173,11 +175,29 @@ sub _run ( $home, $path, @argv )
 	return $r;
 }
 
+# _unstamped(@argv):
+#	Run the program of the checkout as a child. No release
+#	stamped that file, so App::FuguBench->VERSION is undef in the
+#	child. The child loads the checkout, so it carries PERL5LIB.
+sub _unstamped (@argv)
+{
+	my $home = tempdir( CLEANUP => 1 );
+	my $r    = Fugu::Process->run(
+		cmd => [ $^X, "-I$root/lib", $program, @argv ],
+		cwd => $home,
+		env => _env( HOME => $home, %LIB ),
+	);
+	die "cannot run $program: $r->{error}\n" if defined $r->{error};
+
+	return $r;
+}
+
 # _stamped( $version, @argv ):
 #	Run the program as a child with one stamped version. The dist
 #	build stamps `our $VERSION` into every package, and a
 #	checkout carries no stamp, so the child writes the variable
-#	that the stamp writes.
+#	that the stamp writes. The child loads the checkout, so it
+#	carries PERL5LIB.
 sub _stamped ( $version, @argv )
 {
 	my $home = tempdir( CLEANUP => 1 );
@@ -190,7 +210,7 @@ sub _stamped ( $version, @argv )
 			$version, @argv
 		],
 		cwd => $home,
-		env => _env( HOME => $home ),
+		env => _env( HOME => $home, %LIB ),
 	);
 	die "cannot run the stamped program: $r->{error}\n"
 	    if defined $r->{error};
@@ -310,8 +330,7 @@ subtest 'a file that no release stamped pins nothing' => sub {
 	# with no tag carries 0.0.0. No release holds either one.
 	is( App::FuguBench->VERSION, undef, 'the checkout carries no stamp' );
 
-	my $home = tempdir( CLEANUP => 1 );
-	my $r = _run( $home, $^X, "-I$root/lib", $program, 'shim' );
+	my $r = _unstamped('shim');
 	is( $r->{exit_code}, 1,   'the checkout shim exits 1' );
 	is( $r->{stdout},    q{}, 'and it prints no shim' );
 	like(
