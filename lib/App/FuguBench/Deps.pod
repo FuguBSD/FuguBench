@@ -235,9 +235,11 @@ verb downloads the standalone C<cpanm> script into a temporary
 directory, and this perl runs that script.
 
 A C<bin> entry installs into F<~/.local/bin>, with mode 755. The verb
-stops with an error when C<HOME> is unset, before it runs one
-command. For an archive, tar or unzip unpacks the one file of the
-entry, and the verb copies that file alone.
+stops with an error when C<HOME> is unset, before the first C<bin>
+entry installs. The C<pkg>, C<dist>, and C<cpan> entries of the
+environment run first, in that order. For an archive, tar or unzip
+unpacks the one file of the entry, and the verb copies that file
+alone.
 
 A child that exits non-zero stops the run, and the message names the
 command. No later command of the environment runs, and the verb
