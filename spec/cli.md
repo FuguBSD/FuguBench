@@ -33,7 +33,8 @@ the sandbox, the doctor, and the conformance tests.
   check first.
 - **CLI-PROGRAM-7** — The program must be silent on success, except for the
   result line that a verb defines. A `--verbose` option adds the trace of each
-  command to standard error.
+  command to standard error. A verb can add its own progress lines to that
+  stream, and DEPS-MANIFEST-9 names the lines of `deps`.
 
 <a id="cli-verbs"></a>
 

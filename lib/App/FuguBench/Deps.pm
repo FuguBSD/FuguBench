@@ -1936,6 +1936,7 @@ sub _command ( $ctx, @cmd )
 #	Report one step of the run on standard error. The line goes
 #	out under --verbose alone, because the program is silent on
 #	success except for the result line (CLI-PROGRAM-7).
+#	DEPS-MANIFEST-9 names the progress lines of this verb.
 #
 #	A message that reports a fault takes the logger directly, at
 #	the warning level or the error level, and no run hides it.

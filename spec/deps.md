@@ -43,6 +43,10 @@ runs in-process through Fugu LIB-SIGNIFY with the engine of Fugu LIB-ED25519.
   name, the URL, and, for an archive, the path of the file in the archive. An
   archive URL ends in `.tar.gz`, `.tgz`, or `.zip`, and it needs the path. A
   plain URL takes none.
+- **DEPS-MANIFEST-9** — `--verbose` must add the progress lines of the run to
+  standard error (CLI-PROGRAM-7). The lines name the entry list of each type,
+  the key that verified a signed manifest, the bootstrap of `cpanm`, and the
+  local library. A warning and an error report a fault, so no run hides one.
 
 <a id="deps-install"></a>
 

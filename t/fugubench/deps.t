@@ -298,7 +298,8 @@ sub _trace ($result)
 }
 
 # The trace is the standard output, and a progress line waits for
-# --verbose (CLI-PROGRAM-4, CLI-PROGRAM-7, DEPS-MANIFEST-6)
+# --verbose (CLI-PROGRAM-4, CLI-PROGRAM-7, DEPS-MANIFEST-6,
+# DEPS-MANIFEST-9)
 {
 	my $dir = _checkout( 'Darwin.txt' => "test pkg ok\n" );
 	my $r = _deps( $dir, '--dry-run', '--os', 'Darwin', 'test' );
