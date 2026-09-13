@@ -458,6 +458,36 @@ sub _bin ( $url, %file )
 	);
 }
 
+# No declared key loads, so the run stops and the message reports
+# each failure (DEPS-KEYS-7)
+{
+	my $url  = _release('no-key') . '/tool-1.0.0';
+	my $key  = "http://127.0.0.1:$port/keys/fugubench-test.pub";
+	my $gone = "http://127.0.0.1:$port/keys/absent.pub";
+	my $r    = _bin(
+		$url,
+		'KEYS.txt' => "fugubench-old $key $WRONG\n"
+		    . "fugubench-gone $gone $WRONG\n",
+	);
+	is( $r->{exit_code}, 1, 'a key set that does not load exits 1' );
+	like(
+		$r->{stderr}, qr/no declared key loaded, so no signature/,
+		'the message names the key set that did not load'
+	);
+	like(
+		$r->{stderr}, qr/^\S+ \S+ ERROR:\s+fugubench-old: /m,
+		'the tail names the key that failed its digest'
+	);
+	like(
+		$r->{stderr}, qr/^\S+ \S+ ERROR:\s+fugubench-gone: /m,
+		'the tail names the key that no server answers'
+	);
+	unlike(
+		$r->{stdout}, qr/installed the dependencies/,
+		'a key set that does not load stops the run'
+	);
+}
+
 # A key that signed nothing verifies nothing, and the run stops
 # (DEPS-KEYS-3)
 {
