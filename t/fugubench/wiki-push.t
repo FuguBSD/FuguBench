@@ -226,6 +226,57 @@ subtest 'a resume against a stale clone finds the page of its session' => sub {
 		[ _page(1) ], 'the resume adds no page' );
 };
 
+subtest 'a clone with a commit of its own finds the page of its session' =>
+    sub {
+	my ( $tree, $origin ) = _tree();
+	my $one = _checkout( $tree, $origin, 'c1' );
+
+	my $r = _run( $tree, $one, 'open', 'P', 'sess-9' );
+	is( $r->{exit_code}, 0, 'the first open exits 0' ) or diag $r->{stderr};
+
+	# The peer takes the page of the day, appends to it, and then
+	# opens the page of the session that this case resumes.
+	my $two = _checkout( $tree, $origin, 'c2' );
+	_write( "$tree/peer.md", "Claim: the peer writes first.\n" );
+	$r = _run( $tree, $two, 'note', _page(1), "$tree/peer.md" );
+	is( $r->{exit_code}, 0, 'the peer notes and pushes' )
+	    or diag $r->{stderr};
+	$r = _run( $tree, $two, 'open', 'P', 'sess-1' );
+	is( $r->{stdout}, _page(2) . "\n", 'the peer opens the page of sess-1' )
+	    or diag $r->{stderr};
+
+	# This clone appends to the end of the same page, so its rebase
+	# stops and its commit stays local (WIKI-CAPTURE-4). A branch
+	# with a commit of its own takes no fast-forward, so the
+	# working tree of the clone misses the page of sess-1.
+	_write( "$tree/obs.md", "Claim: the loser writes second.\n" );
+	$r = _run( $tree, $one, 'note', _page(1), "$tree/obs.md" );
+	is( $r->{exit_code}, 0, 'the note of the clone exits 0' )
+	    or diag $r->{stderr};
+	is(
+		_git(
+			$tree, '-C', "$one/Wiki", 'rev-list',
+			'--count', 'HEAD', '--not', '--remotes'
+		),
+		"1\n",
+		'the clone holds one commit of its own'
+	);
+	ok( !-e "$one/Wiki/" . _page(2),
+		'the working tree misses the page of the session' );
+
+	# The search of the session reads the fetched branch, so the
+	# resume finds that page and takes no second one (WIKI-OPEN-1,
+	# WIKI-OPEN-2).
+	$r = _run( $tree, $one, 'open', 'P', 'sess-1' );
+	is( $r->{exit_code}, 0, 'the resume exits 0' ) or diag $r->{stderr};
+	is( $r->{stdout}, _page(2) . "\n",
+		'the resume writes the page of the origin' );
+	like( $r->{stderr}, qr/already open/, 'the resume reports the page' );
+	ok( !-e "$one/Wiki/" . _page(3), 'the resume writes no third page' );
+	is_deeply( [ _pages( $tree, $origin ) ],
+		[ _page(1), _page(2) ], 'the resume adds no page' );
+    };
+
 subtest 'a page name that the origin takes between the fetch and the push' =>
     sub {
 	my ( $tree, $origin ) = _tree();
@@ -287,6 +338,62 @@ HOOK
 	    split /\n/, $r->{stderr};
 	is( "@forced", q{}, 'no traced git command forces a push' );
     };
+
+subtest 'the last rejection of a push ends the loop' => sub {
+	my ( $tree, $origin ) = _tree();
+	my $one = _checkout( $tree, $origin, 'c1' );
+	my $two = _checkout( $tree, $origin, 'c2' );
+
+	# The peer opens one page of its own before each push of the
+	# first clone, so the origin rejects every push of that clone
+	# (WIKI-CAPTURE-5). The counter gives the peer a new session
+	# each time, because a second open of one session takes no
+	# page.
+	#
+	# git gives a hook the variables of its own repository, and the
+	# peer runs in another one. So the hook drops them first.
+	my $counter = "$tree/peer.count";
+	_write( "$one/Wiki/.git/hooks/pre-push", <<"HOOK", mode => 0755 );
+#!/bin/sh
+n=\$(cat '$counter' 2>/dev/null || echo 0)
+n=\$((n + 1))
+echo "\$n" > '$counter'
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_CONFIG_PARAMETERS
+'$^X' '-I$root/lib' '$program' -C '$two' wiki open P "peer-\$n" >/dev/null 2>&1
+exit 0
+HOOK
+
+	my $r = _child( $tree, '--verbose', '-C', $one, 'wiki', 'open', 'P',
+		'sess-1' );
+	is( $r->{exit_code}, 0, 'open exits 0 after the last rejection' )
+	    or diag $r->{stderr};
+	is( Fugu::File->read($counter), "3\n", 'the loop pushes three times' );
+
+	# The last try leaves no retry, so the loop ends after it
+	# (WIKI-CAPTURE-5).
+	my $retries = () = $r->{stderr} =~ /rebasing and retrying/g;
+	is( $retries, 2, 'the loop retries twice' );
+	unlike( $r->{stderr}, qr/[(]3 of 3[)]/,
+		'the last rejection writes no retry line' );
+	like( $r->{stderr}, qr/push failed, the commit stays local/,
+		'the loop warns' );
+
+	# Every git command of the verb reaches the trace, so the last
+	# one proves that no fetch, no rename, and no rebase follows
+	# the last rejection.
+	my @git = grep { / INFO: run: git / } split /\n/, $r->{stderr};
+	like( $git[-1], qr/ git push /,
+		'the last try runs no fetch, no rename, and no rebase' );
+
+	is(
+		_git(
+			$tree, '-C', "$one/Wiki", 'rev-list',
+			'--count', 'HEAD', '--not', '--remotes'
+		),
+		"1\n",
+		'the commit stays local (WIKI-CAPTURE-4)'
+	);
+};
 
 subtest 'two clones append to one page, and the rebase of the loser stops' =>
     sub {
@@ -434,17 +541,21 @@ subtest 'note and admit refuse an empty file, an absent page, an absent file' =>
 		$r = _run( $tree, $one, $sub, _page(1), "$tree/empty.md" );
 		is( $r->{exit_code}, 1, "$sub exits 1 on a file with no text" );
 		like( $r->{stderr}, qr/no text in/, "$sub names the file" );
+		is( $r->{stdout}, q{},
+			"$sub writes no result line on a file with no text" );
 
 		$r = _run( $tree, $one, $sub, 'Absent-page', "$tree/obs.md" );
 		is( $r->{exit_code}, 1, "$sub exits 1 on an absent page" );
 		like( $r->{stderr}, qr/no such page: Absent-page/,
 			"$sub names the page" );
+		is( $r->{stdout}, q{},
+			"$sub writes no result line on an absent page" );
 
 		$r = _run( $tree, $one, $sub, _page(1), "$tree/gone.md" );
 		is( $r->{exit_code}, 1, "$sub exits 1 on an absent file" );
 		like( $r->{stderr}, qr/no such file/, "$sub names the file" );
-
-		is( $r->{stdout}, q{}, "$sub writes no result line" );
+		is( $r->{stdout}, q{},
+			"$sub writes no result line on an absent file" );
 	}
 
 	is( _git( $tree, '-C', "$one/Wiki", 'rev-parse', 'HEAD' ),

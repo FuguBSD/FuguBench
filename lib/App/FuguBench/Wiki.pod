@@ -15,11 +15,11 @@ App::FuguBench::Wiki - the wiki verb of fugubench
 =head1 DESCRIPTION
 
 B<App::FuguBench::Wiki> operates the learning library: a git
-repository of flat pages, cloned into one checkout. The subcommands
-are C<init>, C<open>, C<note>, C<admit>, C<close>, C<status>, and
-C<candidates>, and the verb reads the subcommand as its first
-argument. Every other word is an unknown subcommand, and it gives the
-usage error.
+repository of flat pages, cloned below the home of C<wiki.origin>.
+The subcommands are C<init>, C<open>, C<note>, C<admit>, C<close>,
+C<status>, and C<candidates>, and the verb reads the subcommand as
+its first argument. Every other word is an unknown subcommand, and
+it gives the usage error.
 
 Every capture commits, and then pushes. The commit carries the
 durability, and the push carries the visibility. A failed push warns,
@@ -70,7 +70,9 @@ the only line.
 The page is F<< Session-<project>-<date>-<n>.md >>. Its header holds
 the title, a C<Session:> line with the session identifier, a
 C<Project:> line, an C<Opened:> line in UTC, and the heading
-C<## Observations>.
+C<## Observations>. The title is
+C<< # Session <project> <date> <n> >>, so it carries the index of
+the name. A rename writes the title again.
 
 The session identifier lives in the page and never in the name. A
 page that holds the identifier already ends the subcommand: it writes
@@ -151,8 +153,14 @@ settles the race.
 C<open> fetches the branch of the origin before it reads the pages of
 the clone, and it fast-forwards a local branch that holds no commit
 of its own. A clone that a session left behind then pushes without a
-retry, and it finds the page of its own session. A failed fetch
-warns, and the count reads the local clone alone.
+retry. A failed fetch warns, and the count reads the local clone
+alone.
+
+The search for the page of the session reads the working tree, and
+then the fetched branch. A clone with a commit of its own takes no
+fast-forward, so its working tree can miss the page that the origin
+holds. The second search finds that page, and C<open> gives the
+session no second page.
 
 The count takes the pages of the working tree and the pages of the
 fetched branch together, and C<< <n> >> is the first free number.
@@ -166,9 +174,14 @@ name stops on an add/add conflict. The loop then rebases onto the
 fetched branch and pushes again. A rebase that stops aborts at once,
 so no stopped rebase stays behind.
 
+A rename that fails ends the loop, and C<open> returns 1. A failure
+of the title, the stage, or the amend leaves the file and the commit
+apart, and an operator then settles the clone.
+
 No git call carries C<--force>, because a ruleset of the library
-forbids a forced push. After the last try the verb warns, and the
-commit stays local for the next push.
+forbids a forced push. The last try leaves no retry, so no fetch, no
+rename, and no rebase follows it. After that try the verb warns, and
+the commit stays local for the next push.
 
 =head2 THE CHANNELS
 
@@ -190,8 +203,8 @@ does its work returns 0. An absent clone returns 0 with no result
 line, and a failed push returns 0 with a warning.
 
 It returns 1 after a failure: a page that no write reaches, a page or
-a file that C<note> and C<admit> do not find, a file with no text, or
-a stage or a commit that fails.
+a file that C<note> and C<admit> do not find, a file with no text, a
+stage or a commit that fails, or a rename of C<open> that fails.
 
 A missing argument, an extra argument, an unknown subcommand, an
 invalid token, and an invalid page name give the usage error and

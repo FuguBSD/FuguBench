@@ -33,7 +33,9 @@ carries the visibility.
 - **WIKI-PAGES-3** — A session page is `Session-<project>-<date>-<n>.md`. Its
   header holds the title, a `Session:` line with the session identifier, a
   `Project:` line, an `Opened:` line in UTC, and the heading `## Observations`.
-  `close` appends a `Closed:` line.
+  The title is `# Session <project> <date> <n>`, so it carries the index of the
+  name. A rename of the page must write the title again. `close` appends a
+  `Closed:` line.
 - **WIKI-PAGES-4** — The session identifier lives in the page and never in the
   name, so `open` stays idempotent across a resume and a compact. One session
   can drive several runs, so no run identifier reaches a name.
@@ -48,12 +50,16 @@ carries the visibility.
 - **WIKI-OPEN-2** — The verb must fetch the origin before it reads the pages of
   the clone. It must fast-forward a local branch that holds no commit of its
   own. It must count the pages of the day in the local clone and in the fetched
-  branch together. A stale clone alone gave two sessions one name, and it hid
-  the page of a session that resumes.
+  branch together. It must find the page of the session in the working tree, or
+  in the fetched branch. A clone with a commit of its own takes no fast-forward,
+  and its working tree can hide that page. A stale clone alone gave two sessions
+  one name, and it hid the page of a session that resumes.
 - **WIKI-OPEN-3** — A push can fail because the origin holds a page of the same
   name. The verb must then rename its page to the next free `<n>`, amend the
   commit, and retry (D-08). It must not rebase an add/add conflict, and it must
-  leave no stopped rebase behind.
+  leave no stopped rebase behind. A failed rename must end the retries, and the
+  verb must exit non-zero. A failure after the rename leaves the file and the
+  commit apart.
 - **WIKI-OPEN-4** — The verb must print the final page name to standard output
   as the only line.
 - **WIKI-OPEN-5** — A project token and a session token must hold letters,
@@ -79,6 +85,7 @@ carries the visibility.
 - **WIKI-CAPTURE-5** — On a rejected push, the verb must fetch, rebase, and
   retry, three times at most. It must never force a push, because a ruleset of
   the library forbids one. The rename of WIKI-OPEN-3 comes before a rebase.
+  After the last rejection the verb must run no fetch, no rename, and no rebase.
 - **WIKI-CAPTURE-6** — With a detached HEAD, the verb must warn and push
   nothing.
 

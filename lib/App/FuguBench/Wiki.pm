@@ -31,9 +31,9 @@ use Fugu::File;
 # App::FuguBench::Wiki - the wiki verb.
 #
 # The verb operates the learning library: a git repository of flat
-# pages, cloned into one checkout. The subcommands are init, open,
-# note, admit, close, status, and candidates. An unknown subcommand
-# gives the usage error.
+# pages, cloned below the home of wiki.origin. The subcommands are
+# init, open, note, admit, close, status, and candidates. An unknown
+# subcommand gives the usage error.
 #
 # The library is <home of wiki.origin>/<wiki.dir>. A clone under
 # Projects/ holds a .toolingrc of its own without wiki.origin, so the
@@ -244,9 +244,11 @@ sub _init ( $app, @argv )
 #	compact (WIKI-PAGES-4).
 #
 #	The fetch comes before that search and before the count
-#	(WIKI-OPEN-2). A stale clone hides the page of the session,
-#	and open would then give that session a second page. The
-#	rename settles a name that the origin took first
+#	(WIKI-OPEN-2). The search reads the working tree, and then the
+#	fetched branch. A clone that holds a commit of its own takes no
+#	fast-forward, so its working tree can hide the page of the
+#	session, and open would then give that session a second page.
+#	The rename settles a name that the origin took first
 #	(WIKI-OPEN-3).
 sub _open ( $app, @argv )
 {
@@ -264,8 +266,10 @@ sub _open ( $app, @argv )
 	my $branch = _branch( $app, $dir );
 	_fetch( $app, $dir, $branch ) if defined $branch;
 
-	my $log = $app->cli->log;
-	if ( my $found = _page_of_session( $dir, $session ) ) {
+	my $log   = $app->cli->log;
+	my $found = _page_of_session( $dir, $session )
+	    // _origin_page_of_session( $app, $dir, $branch, $session );
+	if ($found) {
 		$log->notice( 'already open: %s', $found );
 		say $found;
 		return EXIT_SUCCESS;
@@ -306,20 +310,21 @@ PAGE
 	# carries the new name and the new title.
 	#
 	# The closure answers 1 after a rename, 0 when the branch holds
-	# no page of that name, and undef after a failure. It takes the
-	# name that the file carries, so the result line names a file
-	# of the clone.
+	# no page of that name, and undef after a failure. The new name
+	# reaches the result line, and a failed rename stops the
+	# subcommand.
 	my $rename = sub ($pages) {
 		return 0 unless $pages->{$page};
 
 		my $index = _free( $dir, $pages, $project, $date );
-		my ( $ok, $name ) = _move(
+		my $name  = _move(
 			$app, $dir, $page,
 			_page( $project, $date, $index ),
 			_title( $project, $date, $index ) );
+		return unless defined $name;
 		$page = $name;
 
-		return $ok ? 1 : undef;
+		return 1;
 	};
 
 	$code = _save( $app, $dir, $page, "open: $page", $rename );
@@ -641,7 +646,8 @@ sub _session_pages ($dir)
 }
 
 # _page_of_session($dir, $session):
-#	The page that records one session, or undef.
+#	The page of the working tree that records one session, or
+#	undef. _origin_page_of_session reads the fetched branch.
 sub _page_of_session ( $dir, $session )
 {
 	for my $page ( _session_pages($dir) ) {
@@ -727,6 +733,40 @@ sub _origin_pages ( $app, $dir, $branch )
 	return grep { /[.]md\z/ } split /\n/, $out;
 }
 
+# _origin_page_of_session($app, $dir, $branch, $session):
+#	The page of the fetched branch that records one session, or
+#	undef (WIKI-OPEN-1). An undefined branch gives undef, and a
+#	branch without that page gives undef. A failed fetch leaves the
+#	ref of the last fetch, and the search then reads it.
+#
+#	A clone that holds a commit of its own takes no fast-forward,
+#	so its working tree can miss the page that the origin holds,
+#	and open would give that session a second page (D-08). One git
+#	grep reads the branch, because the library holds a page of
+#	every session of every day.
+sub _origin_page_of_session ( $app, $dir, $branch, $session )
+{
+	return unless defined $branch;
+
+	# The token holds letters, digits, a dot, a dash, and an
+	# underscore (WIKI-OPEN-5). The dot is the one character that
+	# the pattern of git reads, so the escape takes it alone.
+	my $pattern = '^Session: ' . ( $session =~ s/[.]/\\./gr ) . '$';
+	my $out =
+	    _capture( $app, $dir, 'grep', '--name-only',
+		'--extended-regexp', '-e', $pattern, "origin/$branch", '--',
+		'Session-*.md' );
+	return unless defined $out && length $out;
+
+	# One line of the output is <ref>:<page>, and the first match
+	# answers.
+	my $prefix = "origin/$branch:";
+	my ($line) = split /\n/, $out;
+	return unless rindex( $line, $prefix, 0 ) == 0;
+
+	return substr $line, length $prefix;
+}
+
 # _move($app, $dir, $page, $next, $title):
 #	Rename the page of the commit, write the title of the new
 #	index into it, and amend the commit with the new name
@@ -734,16 +774,16 @@ sub _origin_pages ( $app, $dir, $branch )
 #	page of the old title would contradict its own name
 #	(WIKI-PAGES-3).
 #
-#	Two values: the success, and the name that the file carries
-#	now. A failed title, a failed stage, and a failed amend each
-#	leave the new name on the file, so the caller takes that name
-#	for its result line.
+#	The new name, or undef after a failure. The caller then reports
+#	a failure of the subcommand. A failed rename changes nothing. A
+#	failed title, a failed stage, and a failed amend each leave the
+#	file and the commit apart, and no repair runs here.
 sub _move ( $app, $dir, $page, $next, $title )
 {
 	my $log = $app->cli->log;
 	unless ( rename "$dir/$page", "$dir/$next" ) {
 		$log->error( 'cannot rename %s to %s: %s', $page, $next, $! );
-		return ( 0, $page );
+		return;
 	}
 	$log->notice( 'the origin holds %s, renaming to %s', $page, $next );
 
@@ -754,14 +794,14 @@ sub _move ( $app, $dir, $page, $next, $title )
 			$text =~ s/\A[^\n]*/$title/r ) )
 	{
 		$log->error( 'cannot write the title of %s', $next );
-		return ( 0, $next );
+		return;
 	}
 
 	# The pathspec covers the removal of the old name and the
 	# addition of the new one.
 	unless ( defined _git( $app, $dir, 'add', '-A', '--', $page, $next ) ) {
 		$log->error( 'cannot stage the rename: %s', $app->error );
-		return ( 0, $next );
+		return;
 	}
 	unless (
 		defined _git(
@@ -770,10 +810,10 @@ sub _move ( $app, $dir, $page, $next, $title )
 		) )
 	{
 		$log->error( 'cannot amend the commit: %s', $app->error );
-		return ( 0, $next );
+		return;
 	}
 
-	return ( 1, $next );
+	return $next;
 }
 
 # _save($app, $dir, $page, $subject, $rename):
@@ -781,6 +821,10 @@ sub _move ( $app, $dir, $page, $next, $title )
 #	durability, so a failed commit gives the failure code. The push
 #	carries the visibility, so a failed push warns alone
 #	(WIKI-CAPTURE-4).
+#
+#	A failed rename is no failed push. It can leave the file and the
+#	commit apart, so this method gives the failure code
+#	(WIKI-OPEN-3).
 #
 #	Every commit of the verb carries a change (WIKI-CAPTURE-3).
 #	The subcommand stops before this method when it has nothing to
@@ -801,7 +845,7 @@ sub _save ( $app, $dir, $page, $subject, $rename = undef )
 		return EXIT_ERROR;
 	}
 
-	_push( $app, $dir, $rename );
+	return EXIT_ERROR unless defined _push( $app, $dir, $rename );
 
 	return EXIT_SUCCESS;
 }
@@ -814,10 +858,14 @@ sub _save ( $app, $dir, $page, $subject, $rename = undef )
 #	the loop ends after it. No git call carries --force, because a
 #	ruleset of the library forbids a forced push.
 #
+#	The method answers 1 after a push, 0 after a failed push, and
+#	undef after a failed rename.
+#
 #	The rename takes the pages of the fetched branch. It answers 0
 #	when that branch holds no page of the commit, and undef after a
 #	failure. A failed rename leaves a clone that no rebase settles,
-#	so the loop ends there.
+#	so the method stops there and the caller gives the failure
+#	code.
 #
 #	After the last try the commit stays local, and the next push
 #	takes it.
@@ -847,7 +895,7 @@ sub _push ( $app, $dir, $rename = undef )
 		if ($rename) {
 			my %pages = map { $_ => 1 }
 			    _origin_pages( $app, $dir, $branch );
-			last unless defined $rename->( \%pages );
+			return unless defined $rename->( \%pages );
 		}
 
 		last unless _rebase( $app, $dir, $branch );
