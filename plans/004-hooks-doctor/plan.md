@@ -2,10 +2,10 @@
 
 ## Status
 
-Proposed. It waits on plan 002 (the worktree verb) and plan 003 (the wiki verb):
-`SessionStart` runs `wiki init` and `wiki open`, and `WorktreeCreate` runs
-`worktree create`. It lands after both, in three work packages. The Workspace
-follows with a change of its own: its hook entries and its `jq` dependency.
+Proposed, and it waits on no other plan. `SessionStart` runs `wiki init` and
+`wiki open`, and `WorktreeCreate` runs `worktree create`. The code holds both
+verbs, so this plan can land now, in three work packages. The Workspace follows
+with a change of its own: its hook entries and its `jq` dependency.
 
 Implements: HOOK-EVENTS. Implements: HOOK-SESSION. Implements: HOOK-WORKTREE.
 Implements: HOOK-INSTALL. Implements: CLI-DOCTOR.
@@ -39,7 +39,8 @@ In scope:
 
 Out of scope:
 
-- The wiki verb and the worktree verb. Their plans hold their design.
+- The wiki verb and the worktree verb. `spec/wiki.md` and `spec/worktree.md`
+  hold their design.
 - The Workspace settings file. The Workspace lands that change.
 
 ## Constraints that shape the design
