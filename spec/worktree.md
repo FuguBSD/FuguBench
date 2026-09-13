@@ -12,10 +12,11 @@ comes from Workspace WS-WORKTREE and Workspace WS-BOOTSTRAP.
   `<root>/<worktree.base>/<name>`, on a new branch `<name>` that starts at the
   local HEAD of the main checkout.
 - **WT-CREATE-2** — A name must hold letters, digits, a dot, a dash, an
-  underscore, and a slash, and no `..` segment. The verb must refuse a name
-  whose worktree would sit inside an existing worktree. The removal of the outer
-  worktree destroys the inner one. Two worktrees under one plain parent
-  directory are permitted.
+  underscore, and a slash, and no `..` segment. The first character must be a
+  letter or a digit. A name that starts with a dash reaches git as an option.
+  The verb must refuse a name whose worktree would sit inside an existing
+  worktree. The removal of the outer worktree destroys the inner one. Two
+  worktrees under one plain parent directory are permitted.
 - **WT-CREATE-3** — The verb must make the branch first, as its own step, with
   `git branch`. That step is the lock against a parallel create of one name: one
   create is successful, and the others stop and change nothing.
@@ -30,7 +31,11 @@ comes from Workspace WS-WORKTREE and Workspace WS-BOOTSTRAP.
   stop its child process group and wait for it. It must then remove all that it
   made: the worktree directory, the branch, and each empty parent directory. A
   failed create leaves no worktree and no branch.
-- **WT-CREATE-7** — The verb must refuse a name whose worktree directory exists.
+- **WT-CREATE-7** — A second `create` of a name whose worktree exists must run
+  the bootstrap again, write the path again, and exit 0. A caller can run the
+  same create twice, and the second run must not fail (HOOK-WORKTREE-3). A path
+  that exists, but that is no worktree of that name, stays an error. The message
+  must name the remove command as the remedy.
 
 <a id="wt-remove"></a>
 
@@ -44,12 +49,15 @@ comes from Workspace WS-WORKTREE and Workspace WS-BOOTSTRAP.
   that no remote holds. `--force` overrides the refusal.
 - **WT-REMOVE-3** — The walk for the repositories inside a worktree must stop at
   each repository that it finds. It must skip `scratch/` and a nested worktree
-  directory. In a repository with no remote, a commit that the `main` branch
-  holds is safe. A linked worktree shares its ref store with the main checkout,
-  so its count reads its own HEAD alone.
+  directory, which is the `worktree.base` directory of the checkout. In a
+  repository with no remote, a commit that the `main` branch holds is safe. A
+  linked worktree shares its ref store with the main checkout, so its count
+  reads its own HEAD alone.
 - **WT-REMOVE-4** — The verb must remove a locked worktree, debris from a killed
   create, and a worktree that a user deleted by hand. A second run causes no
-  change.
+  change. git knows no debris, and its discovery walks up from the debris to the
+  checkout above it. So the verb must trust no answer of git about a directory
+  that git does not know.
 - **WT-REMOVE-5** — The verb must never delete the branch `main`, and never the
   branch that the main checkout has checked out.
 - **WT-REMOVE-6** — The verb must resolve symbolic links, and it must refuse a
@@ -63,9 +71,11 @@ comes from Workspace WS-WORKTREE and Workspace WS-BOOTSTRAP.
 ## List
 
 - **WT-LIST-1** — `worktree list` must report each worktree with its name, its
-  age in days, and its state. The state is `clean`, or each cause of
-  WT-REMOVE-2. The age comes from the `.git` file of the worktree, which records
-  the creation and which later work leaves alone.
+  age in days, and its state. The line must be `%-40s %4s d  %s`: the name, the
+  age, and the state. The state is `clean`, or each cause of WT-REMOVE-2. The
+  age comes from the `.git` file of the worktree, which records the creation and
+  which later work leaves alone. A `.git` file that no read reaches gives the
+  age `?`.
 - **WT-LIST-2** — Without a worktree, the verb must print `no worktrees`.
 
 <a id="wt-clone"></a>
@@ -81,12 +91,16 @@ comes from Workspace WS-WORKTREE and Workspace WS-BOOTSTRAP.
   file, it must copy the file.
 - **WT-CLONE-3** — The verb must copy each regular `.env` file of a cloned tree,
   at any depth, with the mode of the source. It must skip `.git` and a nested
-  worktree directory, and it must not copy through a symbolic link.
+  worktree directory (WT-REMOVE-3), and it must not copy through a symbolic
+  link.
 - **WT-CLONE-4** — A destination that exists must stay as it is, so a second run
   repairs a partial bootstrap and keeps local changes. The verb replaces a
   symbolic link at the destination of a file copy with a regular file.
 - **WT-CLONE-5** — A path must be relative, with no `..` segment, and not `.`.
-  The verb skips a path that is absent in the main checkout, with a message.
+  The first character must be a letter, a digit, a dot, or an underscore. A
+  gitignored path starts with a dot, and a path that starts with a dash reaches
+  git as an option. The verb skips a path that is absent in the main checkout,
+  with a message.
 - **WT-CLONE-6** — The verb must write inside the current directory only. In the
   main checkout itself, it must report that fact and change nothing.
 - **WT-CLONE-7** — The verb must write no credential into a settings file. A
