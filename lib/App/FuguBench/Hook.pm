@@ -499,7 +499,7 @@ sub entries ($)
 # App::FuguBench::Hook->worktree:
 #	The worktree settings of the install, as a reference to a hash
 #	(HOOK-INSTALL-4). baseRef takes the value head, because a
-#	worktree starts at the local HEAD. Without that value, the
+#	worktree starts at the local HEAD. Without the hooks, the
 #	built-in creation branches from origin/main and skips the
 #	bootstrap.
 #

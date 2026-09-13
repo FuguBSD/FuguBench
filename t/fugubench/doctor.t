@@ -617,6 +617,28 @@ PAGE
 	ok( _stopped($library), 'the refusal leaves the rebase' );
 };
 
+subtest 'a pending commit that adds another file refuses the fix' => sub {
+	my $tree = _tree();
+	my ( $dir, $library ) = _library($tree);
+
+	# The commit adds one file, and that file holds no
+	# observation, so the name alone refuses the fix. The doctor
+	# reads the shape of a session page from the wiki verb
+	# (WIKI-PAGES-3), and no other name is one.
+	my $file = 'Notes.md';
+	_race( $tree, $dir, $file, "# Notes\n\n## Observations\n" );
+
+	my ( $r, $lines ) = _doctor( $tree, $dir, {}, '--fix' );
+	is(
+		_line( $lines, 'library' ),
+		'problem library: stopped rebase, fix refused:'
+		    . " $file is no session page",
+		'a commit that adds another file refuses the fix'
+	);
+	is( $r->{exit_code}, 1, 'the refusal makes the exit code 1' );
+	ok( _stopped($library), 'the refusal leaves the rebase' );
+};
+
 subtest 'a pending commit of another shape refuses the fix' => sub {
 	my $tree = _tree();
 	my ( $dir, $library ) = _library($tree);

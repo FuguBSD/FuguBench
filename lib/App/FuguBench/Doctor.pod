@@ -51,7 +51,7 @@ C<ftp> on C<PATH>, because L<Fugu::Curl> searches them in that order.
 Without one of the three the detail is
 C<no curl, wget, or ftp on PATH>.
 
-C<hooks> reads F<.claude/settings.json> of the checkout root. A
+C<hooks> reads the settings file that the hook verb names. A
 checkout that holds no event of the four gives C<ok hooks: none>, and
 an absent file gives that same line. Most checkouts install no hook,
 and that is no problem.
@@ -63,9 +63,11 @@ C<absent> for an event that the file lost, and
 C<differs from hook install> for every other entry.
 
 A checkout that holds one event gives one C<worktree.baseRef> line
-too. C<hook install> writes that value beside the entries, and the
-built-in creation of a worktree branches from C<origin/main> without
-it. The detail is C<installed>, C<absent>, or
+too, and a C<worktree> key that holds no object gives the problem
+line of that key in its place. C<hook install> writes the base
+reference beside the entries. Without the hooks, the built-in
+creation of a worktree branches from C<origin/main> and skips the
+bootstrap. The detail is C<installed>, C<absent>, or
 C<differs from hook install>, as the detail of an event is.
 
 Each file that stops C<hook install> is a problem: the file that does
@@ -102,8 +104,9 @@ the race carries no work, so the skip destroys nothing.
 
 The C<Closed:> line of C<wiki close> is no observation. C<close>
 appends that line at the end of the page, under the heading
-C<## Observations>, so a page of a session that ran and ended takes
-the fix.
+C<## Observations>, and the body test drops it. A commit that adds a
+page with that line, and no other text under the heading, takes the
+fix.
 
 The detail of a fix that ended the rebase is
 C<skipped the pending commit E<lt>pageE<gt>>. Every other pending

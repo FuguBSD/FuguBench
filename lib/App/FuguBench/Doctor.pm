@@ -165,10 +165,10 @@ sub _tools ()
 }
 
 # _hooks($app, $checkout):
-#	The lines of the hook entries of .claude/settings.json
-#	(CLI-DOCTOR-1). A checkout that holds no event of the four
-#	gives one line, ok hooks: none. Most checkouts install no
-#	hook, and that is no problem.
+#	The lines of the hook entries of the settings file that the
+#	hook verb names (CLI-DOCTOR-1). A checkout that holds no
+#	event of the four gives one line, ok hooks: none. Most
+#	checkouts install no hook, and that is no problem.
 #
 #	A checkout that holds one event of the four gives one line for
 #	each of the four, so the report names an event that the file
@@ -390,8 +390,11 @@ sub _rebase ( $app, $dir )
 
 # _pending($app, $dir):
 #	The commit that REBASE_HEAD names, or undef. git writes that
-#	reference for the commit that a rebase stopped on, so a skip
-#	that ran leaves another commit there.
+#	reference for the commit that a rebase stopped on. A skip that
+#	stopped again writes the next commit there, and a skip that
+#	ended the rebase leaves the reference on the commit it skipped.
+#	So the caller reads this value while the rebase stands, and two
+#	equal values then tell that no skip ran.
 sub _pending ( $app, $dir )
 {
 	my $out =
