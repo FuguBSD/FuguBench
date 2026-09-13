@@ -1,0 +1,122 @@
+=head1 NAME
+
+App::FuguBench - the dispatcher of the fugubench program
+
+=head1 SYNOPSIS
+
+    use App::FuguBench;
+
+    exit App::FuguBench->new->run(@ARGV);
+
+=head1 DESCRIPTION
+
+B<App::FuguBench> is the dispatcher of C<fugubench>. Every verb
+shares it, and it holds the parts that every verb repeats: the option
+parse, the sandbox entry, the checkout discovery, and the child
+command.
+
+The dispatcher runs over L<Fugu::CLI>. That module parses the global
+options, finds the verb, parses the options of the verb, and calls
+it. Its exit codes are the codes of the program: 0 for success, 1 for
+a failure, 2 for a usage error, and 3 for a configuration error. No
+verb defines another code.
+
+Output has two channels. Standard output carries the result line of a
+verb, and nothing else, because a hook reads it. Every diagnostic
+goes to the logger of L<Fugu::Log>, which writes to standard error. A
+child command writes its own standard error there too, in full.
+
+=head2 new
+
+C<new> builds the dispatcher. The global options are C<-C E<lt>dirE<gt>>,
+which names the start of the checkout walk, and C<--verbose>, which
+traces each child command on standard error.
+
+The command table holds one entry for each verb module of this
+distribution. Each module has one class method, C<command($verb)>,
+that returns the entry of the L<Fugu::CLI> table: C<summary>,
+C<usage>, C<options> and C<run>. A module that holds one verb ignores
+the name. The body of the entry receives the dispatcher and the
+arguments of the verb.
+
+=head2 run
+
+C<run(@argv)> parses the command line, enters the sandbox row of the
+verb, dispatches, and returns the exit code.
+
+An empty command line is a usage error: the method prints the usage
+on standard error and returns 2.
+
+=head2 cli
+
+C<cli> returns the L<Fugu::CLI> dispatcher. A verb body reads its
+options with C<< $app->cli->option($name) >>, and it reports with
+C<< $app->cli->log >>.
+
+=head2 checkout
+
+C<checkout> returns the L<App::FuguBench::Checkout> of the run. The
+walk runs on the first call, from the C<-C> value or from the current
+directory. A verb that reads no checkout never starts it, so
+C<fugubench version> runs in a home with no F<.toolingrc>.
+
+The method returns C<undef> when no F<.toolingrc> sits above the
+start, and it names the start directory in the log. The verb then
+returns the configuration code.
+
+C<checkout($checkout)> sets the checkout, for a verb that reads its
+start from a payload.
+
+=head2 command
+
+C<command(\@cmd, %args)> runs one child command through
+C<< Fugu::Process->run >>. The command is an argument list, and it
+never reaches a shell. Every other argument reaches
+C<< Fugu::Process->run >>, so a caller names C<cwd>, C<stdin>, C<env>
+or C<timeout> there.
+
+The method writes the command line to standard error under
+C<--verbose>, before the child runs. After the child exits, it writes
+the captured standard error of the child to standard error, in full.
+
+=head2 error
+
+C<error> returns the reason of the last failure of C<command>, or
+C<undef>.
+
+=head1 THE SANDBOX
+
+One table in this module maps each verb to its pledge promises and
+its unveil paths. The dispatcher enters the row of the verb after the
+option parse and before the body runs, so a row can name a path that
+an option gives. On a platform other than OpenBSD the calls change
+nothing.
+
+unveil holds across an exec, and a child needs the paths of the
+system: the loader, the library directories, the shell of a make
+recipe, the git helpers, the certificate bundle, and the resolver
+files. No row can name them all. A verb that runs a child command
+therefore pledges its promises and unveils nothing. A verb that runs
+no child unveils the paths of its row and locks the view.
+
+=head1 RETURN VALUES
+
+C<new> returns a dispatcher. C<run> returns an exit code. C<cli>
+returns the L<Fugu::CLI> dispatcher. C<checkout> returns a checkout
+or C<undef>.
+
+C<command> returns the captured standard output of the child, and
+C<undef> with the reason in C<error>. A child that writes nothing
+gives the empty string, so a caller tests the return value with
+C<defined>.
+
+=head1 SEE ALSO
+
+L<App::FuguBench::Checkout>, L<Fugu::CLI>, L<Fugu::Log>,
+L<Fugu::Process>, L<Fugu::Sandbox>
+
+=head1 AUTHORS
+
+Dick Olsson E<lt>hi@senzilla.ioE<gt>
+
+=cut
