@@ -9,9 +9,14 @@
 #
 # The file holds two line forms. A body line gives the key body, and
 # a case compares it directly. A URL line gives the published key
-# file and its sha256 digest, so a case must read the network to see
-# the body. That case runs with FUGUBENCH_NETWORK set, and it skips
-# without it, so `make test` reads no network.
+# file and its sha256 digest. A signify public key file holds the
+# comment line and the body and nothing else, so a case rebuilds
+# that file from the pair and holds it to the digest. That case
+# needs no network, and one wrong character of the body breaks it.
+#
+# A last case fetches the published file itself. It runs with
+# FUGUBENCH_NETWORK set, and it skips without it, so `make test`
+# reads no network.
 
 use v5.34;
 use warnings;
@@ -112,9 +117,23 @@ for my $i ( 0 .. $#lines ) {
 	is( $pairs[$i][1], $body, "the pair of $name holds the body of its line" );
 }
 
-# The URL form names the published key file, and its digest is the
-# trust anchor (DEPS-KEYS-2). The case fetches that file, holds it to
-# the digest, and reads the body out of it.
+# The URL form carries no body, and its digest is the trust anchor
+# (DEPS-KEYS-2). The case rebuilds the published file from the name
+# of the line and the body of the pair, and it holds the result to
+# that digest (DIST-KEY-1).
+for my $i ( 0 .. $#lines ) {
+	my ( $name, undef, $digest ) = @{ $lines[$i] };
+	next unless defined $digest;
+
+	my $text = "untrusted comment: $name public key\n$pairs[$i][1]\n";
+	is(
+		Digest::SHA->new(256)->add($text)->hexdigest, $digest,
+		"the pair of $name rebuilds the key file of its line"
+	);
+}
+
+# The same anchor over the network: the case fetches the published
+# file, holds it to the digest, and reads the body out of it.
 subtest 'the published key file of each URL line' => sub {
 	plan skip_all => 'set FUGUBENCH_NETWORK to read the network'
 	    unless $ENV{FUGUBENCH_NETWORK};
