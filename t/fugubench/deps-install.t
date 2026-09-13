@@ -9,8 +9,8 @@
 # and exits 0. One case takes a second PATH, whose sudo exits 1. PATH
 # holds one of those directories alone, so a real package manager and
 # a real cpanm answer no case. HOME sits in the temporary tree, so a
-# bin entry lands there, and mkdir, tar, unzip, cp and chmod are the
-# commands of this host, which write in that tree alone.
+# bin entry lands there, and mkdir, tar, gzip, unzip, cp and chmod
+# are the commands of this host, which write in that tree alone.
 #
 # No case asks the network. The bin cases download from a forked
 # server over the core IO::Socket::INET, on the loopback address. The
@@ -152,8 +152,14 @@ _stub( $path, 'cpanm',   _record('cpanm') );
 
 # The commands of a bin install, and the downloader of this host.
 # PATH holds the stub directory alone, so each one needs a link.
+#
+# gzip is a command of `tar -xzf`. The GNU tar of Linux and the tar
+# of OpenBSD each run gzip(1) as a child, and they find it on PATH
+# alone. The bsdtar of macOS decompresses in-process and asks for no
+# such child, so an absent gzip fails on two platforms and passes on
+# the third.
 _link( $path, basename( $downloader->command ) ) or die 'link the downloader';
-for my $name (qw(mkdir cp chmod tar)) {
+for my $name (qw(mkdir cp chmod tar gzip)) {
 	plan skip_all => "no $name is on PATH" unless _link( $path, $name );
 }
 my $UNZIP = _link( $path, 'unzip' );
