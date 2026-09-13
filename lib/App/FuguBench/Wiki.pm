@@ -78,6 +78,12 @@ my $PAGE = qr{\A[A-Za-z][A-Za-z0-9._-]*\z};
 # dash reaches git as an option.
 my $TOKEN = qr{\A[A-Za-z0-9][A-Za-z0-9._-]*\z};
 
+# The shape of the name of a session page (WIKI-PAGES-3). _page
+# builds one name of that shape from a project token, a date, and an
+# index, and this pattern reads one back.
+my $SESSION =
+qr{\ASession-[A-Za-z0-9][A-Za-z0-9._-]*-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]+[.]md\z};
+
 # The prefix that the prose lint skips. A page with it would never
 # meet the prose gate (WIKI-PAGES-2).
 use constant SCRATCHPAD => 'SCRATCHPAD';
@@ -461,7 +467,7 @@ sub _status ( $app, @argv )
 		my $text = Fugu::File->read("$dir/$page") // q{};
 		next if $text =~ /^Closed:/m;
 
-		my ($body) = $text =~ /^[#][#] Observations$(.*)\z/ms;
+		my $body = __PACKAGE__->observations($text);
 		next unless defined $body && $body =~ /\S/;
 
 		my $claims   = () = $body =~ /^Claim:/mg;
@@ -600,6 +606,33 @@ sub _page_path ( $app, $dir, $page )
 	}
 
 	return "$dir/$name.md";
+}
+
+# App::FuguBench::Wiki->session_page($name):
+#	True when one name is the name of a session page
+#	(WIKI-PAGES-3). _page builds that name, and the doctor reads
+#	the shape here, so the two verbs never disagree.
+sub session_page ( $, $name )
+{
+	return $name =~ $SESSION ? 1 : 0;
+}
+
+# App::FuguBench::Wiki->observations($text):
+#	The text under the ## Observations heading of one page, or
+#	undef when the page holds no such heading (WIKI-PAGES-3).
+#
+#	The Closed: line is no observation. close appends that line at
+#	the end of the page, and the heading is the last one of the
+#	template, so the line lands under it (WIKI-CAPTURE-2).
+#
+#	The status subcommand and the doctor verb read the body of a
+#	page here, so the two never disagree.
+sub observations ( $, $text )
+{
+	my ($body) = $text =~ /^[#][#] Observations$(.*)\z/ms;
+	return unless defined $body;
+
+	return $body =~ s/^Closed:[^\n]*\n?//mgr;
 }
 
 # _page($project, $date, $n):

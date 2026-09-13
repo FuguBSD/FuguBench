@@ -197,6 +197,23 @@ dash, and an underscore, with a leading letter and no C<..>. It must
 not start with C<SCRATCHPAD>, because the prose lint skips that
 prefix.
 
+=head2 session_page
+
+C<session_page($name)> answers 1 when the name is the name of a
+session page, C<Session-E<lt>projectE<gt>-E<lt>dateE<gt>-E<lt>nE<gt>.md>,
+and 0 for every other name. The doctor reads the shape here, so the
+two verbs never disagree.
+
+=head2 observations
+
+C<observations($text)> returns the text of one page under the heading
+C<## Observations>, and C<undef> for a page with no such heading.
+
+The C<Closed:> line is no observation, and the return value holds no
+such line. C<close> appends that line at the end of the page, and the
+heading is the last one of the template, so the line lands under it.
+C<status> and the doctor read the body of a page here.
+
 =head1 EXIT CODES
 
 The verb returns the exit codes of L<Fugu::CLI>. A subcommand that
