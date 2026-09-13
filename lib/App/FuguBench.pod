@@ -64,11 +64,18 @@ directory. A verb that reads no checkout never starts it, so
 C<fugubench version> runs in a home with no F<.toolingrc>.
 
 The method returns C<undef> when no F<.toolingrc> sits above the
-start, and it names the start directory in the log. The verb then
-returns the configuration code.
+start. The call of the verb names the start directory in the log, and
+the verb then returns the configuration code.
+
+The walk runs one time, and a failed walk stays failed. A sandbox row
+reads the checkout before the verb does, and that row reports nothing.
+So the report waits for the call of the verb, and it comes one time. A
+verb that rejects its argument list reports the usage, and no
+configuration error.
 
 C<checkout($checkout)> sets the checkout, for a verb that reads its
-start from a payload.
+start from a payload. The argument drops the report of a failed walk,
+so no later call writes it.
 
 =head2 command
 
@@ -119,9 +126,15 @@ C<undef>.
 =head1 THE SANDBOX
 
 One table in this module holds the sandbox row of each verb. A row
-names the pledge promises of the verb, and it names nothing else. The
-dispatcher pledges the row of the verb before the body runs. On a
-platform other than OpenBSD the call changes nothing.
+names the pledge promises of the verb, and the unveil paths of a verb
+that opens a file of its own. The dispatcher resolves the row after
+the option parse, it unveils and pledges, and then the body runs. On a
+platform other than OpenBSD the calls change nothing.
+
+The unveil comes in front of the pledge. unveil(2) needs the C<unveil>
+promise, no row of the table holds that promise, and a pledge in front
+of the call would stop the program. A row with no list unveils
+nothing, and the whole filesystem stays in view.
 
 A row can name subcommands. The dispatcher then pledges the promises
 of the named subcommand, and the promises of the row for every other
@@ -134,7 +147,12 @@ C<wiki> and C<worktree> run git, and no row can name each file that a
 child opens. So each row unveils nothing. git pushes, so the row of
 C<wiki> adds the network promises. The C<list> subcommand of
 C<worktree> writes no file, so that subcommand drops the write
-promises. No row of this distribution unveils a path.
+promises.
+
+C<traces> opens its files itself and runs no child, so its row
+unveils. The list comes from the verb, because a path of it comes
+from an option and a path of it comes from the checkout.
+L<App::FuguBench::Traces> holds the list and the reason of each path.
 
 =head1 RETURN VALUES
 
@@ -151,9 +169,9 @@ C<child> returns a pid or C<undef>.
 
 =head1 SEE ALSO
 
-L<App::FuguBench::Checkout>, L<App::FuguBench::Wiki>,
-L<App::FuguBench::Worktree>, L<Fugu::CLI>, L<Fugu::File>,
-L<Fugu::Log>, L<Fugu::Process>, L<Fugu::Sandbox>
+L<App::FuguBench::Checkout>, L<App::FuguBench::Traces>,
+L<App::FuguBench::Wiki>, L<App::FuguBench::Worktree>, L<Fugu::CLI>,
+L<Fugu::File>, L<Fugu::Log>, L<Fugu::Process>, L<Fugu::Sandbox>
 
 =head1 AUTHORS
 

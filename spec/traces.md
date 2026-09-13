@@ -60,9 +60,10 @@ outside letters, digits, and a hyphen with a hyphen.
 - **TRACE-PANEL-3** — `edits` counts the `Edit`, `Write`, `MultiEdit`, and
   `NotebookEdit` blocks of the main session after the first panel launch. A
   block counts when its target is a repository file. An absolute target must sit
-  inside the checkout on a directory boundary. A relative target sits inside it.
-  A target under `scratch/` or a `SCRATCHPAD*.md` file is no repository file. A
-  block with no target counts.
+  inside the checkout path of TRACE-NAME-1, on a directory boundary. A relative
+  target sits inside it. `--name` must not move that boundary, so the verb reads
+  the checkout in each run. A target under `scratch/` or a `SCRATCHPAD*.md` file
+  is no repository file. A block with no target counts.
 
 <a id="trace-sub"></a>
 
