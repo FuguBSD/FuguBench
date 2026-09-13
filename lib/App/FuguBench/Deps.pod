@@ -24,9 +24,9 @@ consumer file changes.
 
 Every download goes through L<Fugu::Curl>, and each download that a
 manifest names takes its check before anything reads it. A run
-without C<--dry-run> then installs: the trace names each command, and
-the command runs as a child. On success the verb ends with one line
-that names the environment.
+without C<--dry-run> then installs, and it runs each command as a
+child. On success the verb ends with one line that names the
+environment.
 
 =head2 command
 
@@ -186,19 +186,23 @@ probe.
 
 =head2 THE TRACE
 
-The verb prints each command that it runs, as one line that starts
-with C<+ > and holds each argument shell-quoted. C<--dry-run> prints
-the same lines and runs none of the commands. A word passes bare when
-it holds word characters, a dot, a solidus, a colon, an equals sign,
-and a dash alone. Every other word, and the empty word, takes single
-quotes.
+C<--dry-run> prints each command that the verb would run, as one line
+that starts with C<+ > and holds each argument shell-quoted, and it
+runs none of them. A word passes bare when it holds word characters,
+a dot, a solidus, a colon, an equals sign, and a dash alone. Every
+other word, and the empty word, takes single quotes.
 
 The program gives no word to a shell. The quoting lets a reader of
 the trace see that an argument with a space is one argument.
 
-The trace is the standard output, and so is the result line. Every
-progress line goes to the logger, which writes to standard error. No
-line of a child reaches the standard output.
+The trace of a dry run is the standard output, and so is the result
+line of an install. Every progress line goes to the logger, which
+writes to standard error. No line of a child reaches the standard
+output.
+
+A run without C<--dry-run> prints no trace line, so its standard
+output holds the result line alone. C<--verbose> then traces each
+command on standard error.
 
 The verb downloads in-process, so the trace names the fetch verb:
 C<< fugubench fetch <file> <url> >>. Each download takes a temporary

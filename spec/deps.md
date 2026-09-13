@@ -30,8 +30,11 @@ runs in-process through Fugu LIB-SIGNIFY with the engine of Fugu LIB-ED25519.
 - **DEPS-MANIFEST-5** — Without a manifest for the operating system, the verb
   must report that fact and exit zero.
 - **DEPS-MANIFEST-6** — `--dry-run` must print each command that the verb would
-  run, as one line that starts with `+ ` and holds each argument shell-quoted.
-  It must run none of them. The trace is the oracle of CLI-CONFORMANCE-2.
+  run, and it must run none of them. Each line starts with `+ ` and holds every
+  argument shell-quoted. The trace is the result of a dry run, so it goes to
+  standard output. A run without `--dry-run` must write no trace there, and
+  `--verbose` must trace each command on standard error. The trace is the oracle
+  of CLI-CONFORMANCE-2.
 - **DEPS-MANIFEST-7** — A `pkg` name and a `cpan` name must not start with a
   dash, and neither may be a URL. Both reach a package manager, which owns its
   own check.

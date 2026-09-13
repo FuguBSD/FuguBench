@@ -304,13 +304,19 @@ sub _checkout (%file)
 #	Run the deps verb against one checkout, with the stub PATH of
 #	$bin and the home of that checkout. The method empties the log
 #	first, so _log holds the commands of this run alone.
+#
+#	--verbose is a global option of the program, and Fugu::CLI
+#	parses the global options in front of the verb. The method
+#	takes it in @argv and moves it there.
 sub _deps ( $dir, $bin, $env, @argv )
 {
 	unlink $log;
+	my @global = grep { $_ eq '--verbose' } @argv;
+	my @option = grep { $_ ne '--verbose' } @argv;
 	my $result = Fugu::Process->run(
 		cmd => [
-			$^X,  "-I$repo/lib", $program, '-C',
-			$dir, 'deps',        @argv
+			$^X,  "-I$repo/lib", $program, @global,
+			'-C', $dir,          'deps',   @option
 		],
 		env => {
 			PATH   => $bin,
@@ -356,16 +362,20 @@ sub _installed ( $dir, $name )
 	}
 }
 
-# The trace and the result line are the standard output, and both
-# streams of a child are the standard error (CLI-PROGRAM-4,
-# DEPS-INSTALL-10)
+# The result line is the whole standard output of a real run, and
+# both streams of a child are the standard error (CLI-PROGRAM-4,
+# CLI-PROGRAM-7, DEPS-INSTALL-10)
 {
 	my $dir = _checkout( 'Darwin.txt' => "test pkg one\n" );
 	my $r = _deps( $dir, $path, {}, '--os', 'Darwin', 'test' );
 	is(
 		$r->{stdout},
-		"+ brew install one\ninstalled the dependencies of test\n",
-		'the standard output holds the trace and the result line'
+		"installed the dependencies of test\n",
+		'the standard output holds the result line alone'
+	);
+	unlike(
+		$r->{stderr}, qr/^\+ /m,
+		'a run without --verbose writes no trace line'
 	);
 	like(
 		$r->{stderr}, qr/^the child standard output$/m,
@@ -375,6 +385,37 @@ sub _installed ( $dir, $name )
 		$r->{stderr}, qr/^the child standard error$/m,
 		'the standard error of a child reaches standard error'
 	);
+}
+
+# --verbose traces each command on standard error, and it adds no
+# line to standard output (CLI-PROGRAM-4, CLI-PROGRAM-7)
+{
+	my $dir = _checkout( 'Darwin.txt' => "test pkg one\n" );
+	my $r =
+	    _deps( $dir, $path, {}, '--verbose', '--os', 'Darwin', 'test' );
+	is( $r->{exit_code}, 0, 'a verbose install exits 0' );
+	is(
+		$r->{stdout},
+		"installed the dependencies of test\n",
+		'--verbose leaves the standard output as it was'
+	);
+	like(
+		$r->{stderr}, qr/^\S+ \S+ INFO: run: brew install one$/m,
+		'--verbose traces the command on standard error'
+	);
+}
+
+# --dry-run prints the trace on standard output, and it runs no
+# command (DEPS-MANIFEST-6)
+{
+	my $dir = _checkout( 'Darwin.txt' => "test pkg one\n" );
+	my $r = _deps( $dir, $path, {}, '--dry-run', '--os', 'Darwin', 'test' );
+	is( $r->{exit_code}, 0, 'a dry run exits 0' );
+	is(
+		$r->{stdout}, "+ brew install one\n",
+		'the trace of a dry run is the whole standard output'
+	);
+	is_deeply( [ _log() ], [], 'a dry run runs no command' );
 }
 
 # A cpan entry reaches cpanm --notest, and PERL_LOCAL_LIB_ROOT adds
@@ -403,12 +444,18 @@ sub _installed ( $dir, $name )
 # script and runs it under this perl (DEPS-INSTALL-3, DEPS-INSTALL-4)
 {
 	my $dir = _checkout( 'Darwin.txt' => "test cpan Some::Module\n" );
-	my $r = _deps( $dir, $bare, {}, '--os', 'Darwin', 'test' );
+	my $r =
+	    _deps( $dir, $bare, {}, '--verbose', '--os', 'Darwin', 'test' );
 	is( $r->{exit_code}, 0, 'the bootstrap exits 0' );
-	like(
+	is(
 		$r->{stdout},
-		qr{^\Q+ fugubench fetch \E\S+ \Qhttps://cpanmin.us\E$}m,
-		'the trace names the download of the standalone script'
+		"installed the dependencies of test\n",
+		'the download of the script reaches no standard output'
+	);
+	like(
+		$r->{stderr},
+		qr{^\S+ \S+ INFO: run: fugubench fetch \S+ \Qhttps://cpanmin.us\E$}m,
+		'--verbose names the download of the standalone script'
 	);
 	is_deeply(
 		[ _log() ],

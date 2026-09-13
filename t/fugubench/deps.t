@@ -446,16 +446,15 @@ sub _trace ($result)
 
 # A run without --dry-run runs each command, and a command that PATH
 # does not hold stops it. PATH holds the stub cpanm alone, so no
-# package manager answers, and the case installs nothing.
+# package manager answers, and the case installs nothing. The run
+# writes no trace line, because standard output carries the result of
+# the verb alone (CLI-PROGRAM-4).
 {
 	my $dir = _checkout( 'Darwin.txt' => "test pkg ok\n" );
 	my $r = _deps( $dir, '--os', 'Darwin', 'test' );
 	is( $r->{exit_code}, 1, 'an absent package manager exits 1' );
-	is_deeply(
-		[ _trace($r) ],
-		['brew install ok'],
-		'the trace names the command that the run tried'
-	);
+	is_deeply( [ _trace($r) ],
+		[], 'a run without --dry-run writes no trace line' );
 	like( $r->{stderr}, qr/brew/, 'the message names the command' );
 	unlike(
 		$r->{stdout}, qr/installed the dependencies/,

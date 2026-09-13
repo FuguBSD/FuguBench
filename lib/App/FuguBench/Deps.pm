@@ -199,10 +199,10 @@ sub _run ( $app, @argv )
 		hold    => [],
 	};
 
-	# The trace is standard output, and each line of a diagnostic
-	# is standard error, which Fugu::Log holds unbuffered. In a
-	# pipe that joins the two, a buffered trace line would land
-	# after the lines of the command that it names.
+	# The dry-run trace is standard output, and each line of a
+	# diagnostic is standard error, which Fugu::Log holds
+	# unbuffered. In a pipe that joins the two, a buffered trace
+	# line would land after the diagnostic that follows it.
 	STDOUT->autoflush(1);
 
 	return _update_sums( $ctx, $file, $by_type ) if $update;
@@ -1854,9 +1854,10 @@ sub _drop_legacy ( $sums, $taken )
 }
 
 # _command($ctx, @cmd):
-#	Run one command of an install as a child, after the trace line
-#	that names it. A dry run prints the line and runs nothing
-#	(DEPS-MANIFEST-6).
+#	Run one command of an install as a child. A dry run prints the
+#	trace line and runs nothing (DEPS-MANIFEST-6). A real run
+#	prints no line here, because $app->command traces each child
+#	on standard error under --verbose (CLI-PROGRAM-7).
 #
 #	The child takes the environment of the run, because a package
 #	manager and cpanm read it. No line of a child reaches standard
@@ -1870,8 +1871,10 @@ sub _drop_legacy ( $sums, $taken )
 #	so no later command of the environment runs.
 sub _command ( $ctx, @cmd )
 {
-	_trace( $ctx, @cmd );
-	return 1 if $ctx->{dry};
+	if ( $ctx->{dry} ) {
+		_trace( $ctx, @cmd );
+		return 1;
+	}
 
 	my $app = $ctx->{app};
 	my $out = $app->command( \@cmd );
@@ -1885,18 +1888,30 @@ sub _command ( $ctx, @cmd )
 }
 
 # _trace($ctx, @cmd):
-#	Print one command of the run to standard output, as the line
-#	that starts with '+ ' and holds each argument shell-quoted
-#	(DEPS-MANIFEST-6). The trace is the oracle of
-#	CLI-CONFORMANCE-2, so the form of the line comes from the
-#	synced scripts/deps.
+#	Trace one command of the run. A dry run prints it to standard
+#	output, as the line that starts with '+ ' and holds each
+#	argument shell-quoted (DEPS-MANIFEST-6). That trace is the
+#	oracle of CLI-CONFORMANCE-2, so the form of the line comes
+#	from the synced scripts/deps.
+#
+#	A real run prints no line, because standard output carries the
+#	result of the verb alone (CLI-PROGRAM-4). With --verbose the
+#	line goes to standard error, under the 'run:' lead that
+#	$app->command gives each child (CLI-PROGRAM-7).
 #
 #	A download of the verb runs in-process, and its line names the
 #	fetch verb (DEPS-FETCH-2). Such a line reaches this method, and
 #	never _command.
-sub _trace ( $, @cmd )
+sub _trace ( $ctx, @cmd )
 {
-	say '+ ', join q{ }, map { _quote($_) } @cmd;
+	my $line = join q{ }, map { _quote($_) } @cmd;
+	if ( $ctx->{dry} ) {
+		say '+ ', $line;
+		return;
+	}
+
+	$ctx->{app}->cli->log->info( 'run: %s', $line )
+	    if $ctx->{app}->cli->option('verbose');
 
 	return;
 }
