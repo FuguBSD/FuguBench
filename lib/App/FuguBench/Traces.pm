@@ -156,9 +156,9 @@ sub command ( $, $ )
 #	entry would die in front of that report.
 #
 #	The verb resolves the real path of the checkout root after the
-#	entry, so the row names the root. The walk to the .toolingrc
-#	runs here, in front of the entry, because unveil(2) hides the
-#	directories above the root. Every run reads the checkout,
+#	entry, so the row names the root. The unveil list names that
+#	root, so the walk to the .toolingrc runs here, in front of the
+#	entry. Every run reads the checkout,
 #	because the edit boundary comes from it and --name leaves that
 #	boundary alone (TRACE-PANEL-3).
 sub unveil_paths ( $, $app )

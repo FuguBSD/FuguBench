@@ -162,8 +162,8 @@ build of a perl records a directory that the host can omit, and the
 verb reports an absent trace root itself. A required entry would die
 in front of that report.
 
-The method resolves the checkout, because C<unveil(2)> hides the
-directories above the root and the walk must run first. Every run
+The method resolves the checkout, because the unveil list names the
+checkout root. Every run
 reads the checkout, C<--name> included, because the edits column takes
 its boundary from the checkout path.
 
