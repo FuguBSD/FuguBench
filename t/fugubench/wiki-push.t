@@ -1,9 +1,10 @@
 #!/usr/bin/env perl
 # ex:ts=8 sw=4:
-# The count of the pages, the rename of a page that the origin took,
-# the append of one capture, and the push of the wiki verb
-# (WIKI-OPEN-2, WIKI-OPEN-3, WIKI-CAPTURE-1, WIKI-CAPTURE-4,
-# WIKI-CAPTURE-5, WIKI-CAPTURE-6).
+# The count of the pages, the resume of one session, the rename of a
+# page that the origin took, the capture of note and admit, and the
+# push of the wiki verb (WIKI-OPEN-1, WIKI-OPEN-2, WIKI-OPEN-3,
+# WIKI-PAGES-3, WIKI-CAPTURE-1, WIKI-CAPTURE-4, WIKI-CAPTURE-5,
+# WIKI-CAPTURE-6).
 #
 # On 2026-09-09 two parallel sessions of one day took one page name,
 # and the rebase of the loser stopped on an add/add conflict. So each
@@ -201,6 +202,30 @@ subtest 'the count reads the origin and the working tree' => sub {
 		[ _page(1), _page(2) ], 'a second open adds no page' );
 };
 
+subtest 'a resume against a stale clone finds the page of its session' => sub {
+	my ( $tree, $origin ) = _tree();
+	my $one = _checkout( $tree, $origin, 'c1' );
+	my $two = _checkout( $tree, $origin, 'c2' );
+
+	# The peer opens the page of this session and pushes it. The
+	# first clone cloned before that page arrived, so its working
+	# tree holds no page of the session.
+	my $r = _run( $tree, $two, 'open', 'P', 'sess-1' );
+	is( $r->{stdout}, _page(1) . "\n", 'the peer opens the page' )
+	    or diag $r->{stderr};
+
+	# The fetch comes before the search of the session, so the
+	# stale clone finds that page (WIKI-OPEN-1, WIKI-OPEN-2).
+	$r = _run( $tree, $one, 'open', 'P', 'sess-1' );
+	is( $r->{exit_code}, 0, 'the stale clone exits 0' ) or diag $r->{stderr};
+	is( $r->{stdout}, _page(1) . "\n",
+		'the stale clone writes the page of the origin' );
+	like( $r->{stderr}, qr/already open/,
+		'the stale clone reports the page' );
+	is_deeply( [ _pages( $tree, $origin ) ],
+		[ _page(1) ], 'the resume adds no page' );
+};
+
 subtest 'a page name that the origin takes between the fetch and the push' =>
     sub {
 	my ( $tree, $origin ) = _tree();
@@ -239,6 +264,15 @@ HOOK
 	    _git( $tree, '-C', "$one/Wiki", 'log', '-1', '--format=%s' );
 	is( $subject, 'open: ' . _page(2) . "\n",
 		'the commit subject names the renamed page' );
+
+	# The name and the title of a page carry one index, so the
+	# rename writes the title again (WIKI-PAGES-3). The origin
+	# holds the amended commit, so its copy proves the stage.
+	like(
+		_git( $tree, '-C', $origin, 'show', 'main:' . _page(2) ),
+		qr/\A[#] Session P \Q$today\E 2\n/,
+		'the renamed page carries the title of its index'
+	);
 
 	is( _git( $tree, '-C', "$one/Wiki", 'status', '--porcelain' ),
 		q{}, 'the working tree of the clone is clean' );
@@ -346,5 +380,75 @@ subtest 'a detached HEAD commits and pushes nothing' => sub {
 	is( _git( $tree, '-C', $origin, 'rev-parse', 'main' ),
 		$head, 'the origin does not change' );
 };
+
+subtest 'admit carries its own commit subject, and status counts it' => sub {
+	my ( $tree, $origin ) = _tree();
+	my $one = _checkout( $tree, $origin, 'c1' );
+
+	my $r = _run( $tree, $one, 'open', 'P', 'sess-1' );
+	is( $r->{exit_code}, 0, 'open exits 0' ) or diag $r->{stderr};
+
+	_write( "$tree/obs.md", "Claim: the lease ends at ninety minutes.\n" );
+	$r = _run( $tree, $one, 'note', _page(1), "$tree/obs.md" );
+	is( $r->{exit_code}, 0, 'note exits 0' ) or diag $r->{stderr};
+
+	# The consolidator writes one Admitted: line for each claim
+	# that it moves into a library page (WIKI-STATUS-1).
+	_write( "$tree/moved.md", "Admitted: the lease of the campaign.\n" );
+	$r = _run( $tree, $one, 'admit', _page(1), "$tree/moved.md" );
+	is( $r->{exit_code}, 0, 'admit exits 0' ) or diag $r->{stderr};
+	is( $r->{stdout}, _page(1) . "\n", 'admit writes the page name' );
+
+	# note and admit differ in the word of the commit subject
+	# only (WIKI-CAPTURE-1).
+	is( _git( $tree, '-C', "$one/Wiki", 'log', '-1', '--format=%s' ),
+		'admit: ' . _page(1) . "\n",
+		'the commit subject holds the admit word' );
+	like(
+		Fugu::File->read( "$one/Wiki/" . _page(1) ),
+		qr/^Admitted: the lease of the campaign[.]$/m,
+		'the page holds the text of the file'
+	);
+
+	$r = _run( $tree, $one, 'status' );
+	like( $r->{stdout}, qr/1 claim\(s\), 1 admitted/,
+		'status counts the claim and the admitted one' );
+};
+
+subtest 'note and admit refuse an empty file, an absent page, an absent file' =>
+    sub {
+	my ( $tree, $origin ) = _tree();
+	my $one = _checkout( $tree, $origin, 'c1' );
+
+	my $r = _run( $tree, $one, 'open', 'P', 'sess-1' );
+	is( $r->{exit_code}, 0, 'open exits 0' ) or diag $r->{stderr};
+	my $head = _git( $tree, '-C', "$one/Wiki", 'rev-parse', 'HEAD' );
+
+	# A capture with no text carries nothing, and an absent page
+	# and an absent file name a thing that is not there
+	# (WIKI-CAPTURE-1).
+	_write( "$tree/empty.md", "   \n" );
+	_write( "$tree/obs.md",   "Claim: the page takes one claim.\n" );
+
+	for my $sub (qw(note admit)) {
+		$r = _run( $tree, $one, $sub, _page(1), "$tree/empty.md" );
+		is( $r->{exit_code}, 1, "$sub exits 1 on a file with no text" );
+		like( $r->{stderr}, qr/no text in/, "$sub names the file" );
+
+		$r = _run( $tree, $one, $sub, 'Absent-page', "$tree/obs.md" );
+		is( $r->{exit_code}, 1, "$sub exits 1 on an absent page" );
+		like( $r->{stderr}, qr/no such page: Absent-page/,
+			"$sub names the page" );
+
+		$r = _run( $tree, $one, $sub, _page(1), "$tree/gone.md" );
+		is( $r->{exit_code}, 1, "$sub exits 1 on an absent file" );
+		like( $r->{stderr}, qr/no such file/, "$sub names the file" );
+
+		is( $r->{stdout}, q{}, "$sub writes no result line" );
+	}
+
+	is( _git( $tree, '-C', "$one/Wiki", 'rev-parse', 'HEAD' ),
+		$head, 'no failure reaches a commit' );
+    };
 
 done_testing();

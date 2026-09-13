@@ -148,22 +148,23 @@ Two sessions of one day take one page name when each one counts the
 pages of a stale clone. The scheme of the name stays, and the program
 settles the race.
 
-C<open> fetches the branch of the origin before it picks
-C<< <n> >>, and it fast-forwards a local branch that holds no commit
+C<open> fetches the branch of the origin before it reads the pages of
+the clone, and it fast-forwards a local branch that holds no commit
 of its own. A clone that a session left behind then pushes without a
-retry. A failed fetch warns, and the count reads the local clone
-alone.
+retry, and it finds the page of its own session. A failed fetch
+warns, and the count reads the local clone alone.
 
 The count takes the pages of the working tree and the pages of the
 fetched branch together, and C<< <n> >> is the first free number.
 
 A push that the origin rejects runs one loop of three tries. The loop
 fetches the branch. When the fetched branch holds the page of the
-commit, C<open> renames its page to the next free C<< <n> >> and
-amends the commit. The rename comes before the rebase, because a
-rebase of two pages of one name stops on an add/add conflict. The
-loop then rebases onto the fetched branch and pushes again. A rebase
-that stops aborts at once, so no stopped rebase stays behind.
+commit, C<open> renames its page to the next free C<< <n> >>, writes
+the title of that index into the page, and amends the commit. The
+rename comes before the rebase, because a rebase of two pages of one
+name stops on an add/add conflict. The loop then rebases onto the
+fetched branch and pushes again. A rebase that stops aborts at once,
+so no stopped rebase stays behind.
 
 No git call carries C<--force>, because a ruleset of the library
 forbids a forced push. After the last try the verb warns, and the
