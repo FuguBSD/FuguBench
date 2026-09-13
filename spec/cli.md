@@ -172,12 +172,14 @@ starts a comment.
 
 - **CLI-DOCTOR-1** — `fugubench doctor` must report the state of the checkout.
   The report holds the version of the program, and the presence of `git`,
-  `make`, and a downloader on `PATH`. It holds the hook entries of
-  `.claude/settings.json`, and the state of the library clone.
+  `make`, and a downloader on `PATH`. It holds the hook entries and the worktree
+  base reference of `.claude/settings.json`, and the state of the library clone.
 - **CLI-DOCTOR-2** — The report must name a library clone that sits in a stopped
   rebase, with the page that the pending commit adds. `doctor --fix` must skip
   the pending commit when it adds a session page with no observation, and must
-  refuse otherwise.
+  refuse otherwise. The `Closed:` line of `wiki close` is no observation. A
+  rebase that stops again after the skip must give a problem line that names the
+  skip and the new stop.
 - **CLI-DOCTOR-3** — `doctor` must exit non-zero when a report line names a
   problem, so a make target can gate on it.
 

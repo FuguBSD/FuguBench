@@ -32,6 +32,7 @@ use Fugu::Process;
 
 use App::FuguBench::Hook;
 use App::FuguBench::Version;
+use App::FuguBench::Wiki;
 
 # App::FuguBench::Doctor - the doctor verb.
 #
@@ -46,19 +47,21 @@ use App::FuguBench::Version;
 # a session page with no observation (CLI-DOCTOR-2). Every other
 # pending commit is a refusal, and the operator resolves that rebase.
 #
-# The report holds the facts of the other verbs, and it holds no copy
-# of them. The version line comes from the version verb, and the hook
-# entries come from the hook verb.
+# The report holds the facts of the other verbs. The version line
+# comes from the version verb. The settings path, the keys of that
+# file, the entries, and the worktree settings come from the hook
+# verb, so this module holds no assumption of Claude Code (D-10). The
+# shape of a session page and the body of one come from the wiki
+# verb.
+#
+# The library directory is the one fact that this module reads for
+# itself. It reads the two keys that the wiki verb reads
+# (CLI-CONFIG-2), and a key that names no library gives one report
+# line here. The wiki verb reports the reason on its own call.
 
 # The tools of the report (CLI-DOCTOR-1). git drives every clone, and
 # make drives every gate.
 my @TOOLS = qw(git make);
-
-# The shape of a session page (WIKI-PAGES-3). The fix takes a pending
-# commit that adds one page of that shape, and it refuses every other
-# commit.
-my $SESSION =
-    qr{\ASession-[A-Za-z0-9._-]+-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]+[.]md\z};
 
 # The encoder of the hook comparison. It sorts the keys, so two equal
 # entries give two equal strings, and the comparison reads a nested
@@ -171,13 +174,17 @@ sub _tools ()
 #	each of the four, so the report names an event that the file
 #	lost.
 #
-#	A file that the subcommand hook install cannot extend is a
-#	problem, because that file stops the install. An absent file
-#	stops nothing.
+#	A checkout that holds one event gives one worktree.baseRef
+#	line too, because hook install writes that value beside the
+#	entries (HOOK-INSTALL-4).
+#
+#	The file that no read reaches, the file that holds no JSON
+#	object, and a container key that holds no object are problems,
+#	because each one stops hook install. An absent file stops
+#	nothing.
 sub _hooks ( $app, $checkout )
 {
-	my $path =
-	    File::Spec->catfile( $checkout->root, '.claude', 'settings.json' );
+	my $path = App::FuguBench::Hook->settings_path( $checkout->root );
 	return _ok( 'hooks', 'none' ) unless -e $path;
 
 	my $text = Fugu::File->read($path);
@@ -187,33 +194,64 @@ sub _hooks ( $app, $checkout )
 	return _problem( 'hooks', "$path holds no JSON object" )
 	    unless ref $settings eq 'HASH';
 
-	my $hooks = $settings->{hooks} // {};
-	return _problem( 'hooks', "$path: the hooks key holds no object" )
+	my $key   = App::FuguBench::Hook->hooks_key;
+	my $hooks = $settings->{$key} // {};
+	return _problem( 'hooks', "$path: the $key key holds no object" )
 	    unless ref $hooks eq 'HASH';
 
 	my $entries = App::FuguBench::Hook->entries;
 	my @named   = grep { exists $hooks->{$_} } keys %$entries;
-	return _ok( 'hooks', 'none' ) unless @named;
 
-	return map { _hook( $_, $hooks->{$_}, $entries->{$_} ) }
-	    sort keys %$entries;
+	my @lines =
+	    @named
+	    ? map { _same( "hook $_", $hooks->{$_}, $entries->{$_} ) }
+	    sort keys %$entries
+	    : _ok( 'hooks', 'none' );
+
+	return ( @lines, _worktree( $settings, $path, scalar @named ) );
 }
 
-# _hook($event, $found, $want):
-#	The line of one event. The entry of hook install is the
-#	measure, so the report and the write never disagree.
+# _same($check, $found, $want):
+#	The line of one value of the settings file. The value of hook
+#	install is the measure, so the report and the write never
+#	disagree.
 #
 #	The encoder takes a reference, and a value of another kind is
 #	no reference. So each value goes in a list of one, and every
 #	kind compares.
-sub _hook ( $event, $found, $want )
+sub _same ( $check, $found, $want )
 {
-	my $check = "hook $event";
 	return _problem( $check, 'absent' ) unless defined $found;
 
 	return $JSON->encode( [$found] ) eq $JSON->encode( [$want] )
 	    ? _ok( $check, 'installed' )
 	    : _problem( $check, 'differs from hook install' );
+}
+
+# _worktree($settings, $path, $installed):
+#	The lines of the worktree settings of hook install
+#	(HOOK-INSTALL-4). The subcommand writes them beside the
+#	entries, and a worktree of the harness starts at origin/main
+#	without them.
+#
+#	A value line follows an install alone, because a checkout that
+#	installs no hook needs no value of that key. A key of another
+#	kind is a problem without one: it stops the install, as a
+#	container key of another kind does.
+sub _worktree ( $settings, $path, $installed )
+{
+	my $key   = App::FuguBench::Hook->worktree_key;
+	my $found = $settings->{$key};
+	return _problem( $key, "$path: the $key key holds no object" )
+	    if defined $found && ref $found ne 'HASH';
+	return () unless $installed;
+
+	my $want = App::FuguBench::Hook->worktree;
+
+	return map {
+		_same( "$key.$_", ref $found eq 'HASH' ? $found->{$_} : undef,
+			$want->{$_} )
+	} sort keys %$want;
 }
 
 # _library($app, $checkout):
@@ -313,8 +351,13 @@ sub _stopped ( $app, $dir )
 #	commit carries before the manual repair.
 #
 #	The fix takes one pending commit. A rebase of several commits
-#	stops again at the next conflict, and the next run of the verb
-#	reports that state.
+#	stops again at the next one, and git exits 1 after that skip.
+#	The line then names the skip and the new stop, and it is a
+#	problem line: the clone needs the operator. The next run of
+#	the verb reports the new pending commit.
+#
+#	A skip that leaves the same pending commit ran no skip, and
+#	the line is the refusal with the reason of git.
 sub _rebase ( $app, $dir )
 {
 	my ( $page, $reason ) = _shape( $app, $dir );
@@ -329,12 +372,34 @@ sub _rebase ( $app, $dir )
 	return _problem( 'library', "stopped rebase, fix refused: $reason" )
 	    unless defined $page;
 
-	my $skip = $app->command( [ 'git', 'rebase', '--skip' ], cwd => $dir );
-	return _problem( 'library',
-		'stopped rebase, fix refused: ' . $app->error )
-	    unless defined $skip;
+	my $before = _pending( $app, $dir );
+	$app->command( [ 'git', 'rebase', '--skip' ], cwd => $dir );
+	my $error = $app->error;
+	return _ok( 'library', "skipped the pending commit $page" )
+	    unless _stopped( $app, $dir );
 
-	return _ok( 'library', "skipped the pending commit $page" );
+	my $after = _pending( $app, $dir );
+	return _problem( 'library',
+		"skipped the pending commit $page, the rebase stopped again" )
+	    if defined $after && ( !defined $before || $after ne $before );
+
+	return _problem( 'library',
+		'stopped rebase, fix refused: '
+		    . ( $error // 'the pending commit stands' ) );
+}
+
+# _pending($app, $dir):
+#	The commit that REBASE_HEAD names, or undef. git writes that
+#	reference for the commit that a rebase stopped on, so a skip
+#	that ran leaves another commit there.
+sub _pending ( $app, $dir )
+{
+	my $out =
+	    $app->command( [ 'git', 'rev-parse', 'REBASE_HEAD' ], cwd => $dir );
+	return unless defined $out;
+	chomp $out;
+
+	return $out;
 }
 
 # _shape($app, $dir):
@@ -350,15 +415,19 @@ sub _rebase ( $app, $dir )
 #	carries no work, so the skip destroys nothing.
 sub _shape ( $app, $dir )
 {
-	my @files = _files( $app, $dir );
-	unless ( @files == 1 && $files[0][0] eq 'A' ) {
-		my @paths = map { $_->[1] } @files;
+	my $files = _files( $app, $dir );
+	return ( undef, 'cannot read the pending commit: ' . $app->error )
+	    unless $files;
+
+	unless ( @$files == 1 && $files->[0][0] eq 'A' ) {
+		my @paths = map { $_->[1] } @$files;
 		my $list  = @paths ? join ', ', @paths : 'no file';
 		return ( undef, "the pending commit changes $list" );
 	}
 
-	my $page = $files[0][1];
-	return ( undef, "$page is no session page" ) unless $page =~ $SESSION;
+	my $page = $files->[0][1];
+	return ( undef, "$page is no session page" )
+	    unless App::FuguBench::Wiki->session_page($page);
 
 	my $text =
 	    $app->command( [ 'git', 'show', "REBASE_HEAD:$page" ],
@@ -366,7 +435,7 @@ sub _shape ( $app, $dir )
 	return ( undef, "cannot read $page: " . $app->error )
 	    unless defined $text;
 
-	my ($body) = $text =~ /^[#][#] Observations$(.*)\z/ms;
+	my $body = App::FuguBench::Wiki->observations($text);
 	return ( undef, "$page holds no observation heading" )
 	    unless defined $body;
 	return ( undef, "$page holds an observation" ) if $body =~ /\S/;
@@ -376,8 +445,12 @@ sub _shape ( $app, $dir )
 
 # _files($app, $dir):
 #	The status and the path of each file of the pending commit,
-#	as a list of pairs. REBASE_HEAD names that commit, and it
-#	resolves while the rebase stands.
+#	as a reference to a list of pairs. REBASE_HEAD names that
+#	commit, and it resolves while the rebase stands.
+#
+#	A failed call gives undef, and the caller then reports the
+#	reason of git. A commit that changes no file gives a list of
+#	no pair, and the two states read apart.
 #
 #	A rename carries two paths in one line, and the split of two
 #	fields keeps both. That status is no A, so the fix refuses the
@@ -397,7 +470,7 @@ sub _files ( $app, $dir )
 		push @files, [ $status, $path ];
 	}
 
-	return @files;
+	return \@files;
 }
 
 1;
