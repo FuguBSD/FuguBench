@@ -21,8 +21,8 @@ FuguBSD/Website lists each project website on its front page, and it gains the
 FuguBench entry after this site goes live. The pull request 4 of FuguBSD/Website
 holds that entry. The operator runs the OpenTofu apply of FuguBSD/Repositories.
 
-Implements: DIST-INSTALL without DIST-INSTALL-1 and DIST-INSTALL-2. Plan 007
-lands the two other rules, and this plan is the owner of DIST-INSTALL-3. The
+Implements: DIST-INSTALL without DIST-INSTALL-1 and DIST-INSTALL-2. The code of
+those two rules exists, and this plan is the owner of DIST-INSTALL-3. The
 implementation rewords that rule with the code.
 
 Defers: DIST-ASSETS. The stub fetches the `install.sh` of the latest release,
@@ -209,9 +209,8 @@ tarball passes. Cases:
 - After the merge, the run of `publish.yml` is green. Then
   `https://bench.fugubsd.org/` answers with the front page, and
   `https://bench.fugubsd.org/get` answers with the bytes of `web/get`.
-- `spec/STATUS.md` sets DIST-INSTALL. The state is `partial` with a note that
-  names DIST-INSTALL-1 and DIST-INSTALL-2, or `done` when plan 007 landed first.
-  The "Code roots" table of `dist.md` gains `web`.
+- `spec/STATUS.md` sets DIST-INSTALL to `done`, because the two other rules hold
+  already. The "Code roots" table of `dist.md` gains `web`.
 - The change deletes this plan.
 
 ## Open questions

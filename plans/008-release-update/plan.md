@@ -4,8 +4,6 @@
 
 Proposed. It lands last, after each wait below. Nothing lands now.
 
-- Plan 007 of this repository: the pack, `install.sh`, and the keys module
-  `App::FuguBench::Keys`.
 - Tooling: an asset input of the shared workflow `perl-release.yml`, and the
   perl floor of `scripts/dist`.
 - Repositories: the `release_repos` entry of FuguBench.
@@ -42,7 +40,7 @@ In scope:
 Out of scope:
 
 - The pack, the shim, `install.sh`, the `install` verb, and the keys module.
-  Plan 007 lands them.
+  Each one exists already.
 - The shared workflow of Tooling, and the PAUSE secrets of Repositories.
 - The `/get` page of FuguBSD/Website.
 
@@ -55,7 +53,7 @@ different promises. The sibling module `App::FuguBench::Update` is the fewer
 parts.
 
 **The caller adds no step.** The shared workflow runs `make dist` in the tree of
-the caller and publishes files under `build/`. So `make dist` of plan 007 leaves
+the caller and publishes files under `build/`. So `make dist` leaves
 `build/fugubench` and `build/install.sh`, and the caller names them in the asset
 input. The caller holds the two routes and the inputs, as the caller of Fugu
 does.
