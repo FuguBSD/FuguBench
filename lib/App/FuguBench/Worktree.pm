@@ -171,8 +171,14 @@ sub _setup ($app)
 #	WT-CLONE-3). The directory is the worktree.base value, a
 #	relative path under a checkout root. So the pattern matches it
 #	as a whole segment at the end of a path.
+#
+#	A value of . resolves to the root itself, and the base then
+#	names no directory below it. The pattern matches no path at
+#	all, and the walk skips nothing.
 sub _nested ( $root, $base )
 {
+	return qr{(?!)} if $base eq $root;
+
 	my $dir = substr $base, length($root) + 1;
 
 	return qr{(?:\A|/)\Q$dir\E\z};

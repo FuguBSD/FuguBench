@@ -49,10 +49,12 @@ comes from Workspace WS-WORKTREE and Workspace WS-BOOTSTRAP.
   that no remote holds. `--force` overrides the refusal.
 - **WT-REMOVE-3** — The walk for the repositories inside a worktree must stop at
   each repository that it finds. It must skip `scratch/` and a nested worktree
-  directory, which is the `worktree.base` directory of the checkout. In a
-  repository with no remote, a commit that the `main` branch holds is safe. A
-  linked worktree shares its ref store with the main checkout, so its count
-  reads its own HEAD alone.
+  directory, which is the `worktree.base` directory of the checkout. A
+  `worktree.base` of `.` resolves to the root itself. A worktree then holds no
+  nested worktree directory, and that skip names nothing. In a repository with
+  no remote, a commit that the `main` branch holds is safe. A linked worktree
+  shares its ref store with the main checkout, so its count reads its own HEAD
+  alone.
 - **WT-REMOVE-4** — The verb must remove a locked worktree, debris from a killed
   create, and a worktree that a user deleted by hand. A second run causes no
   change. git knows no debris, and its discovery walks up from the debris to the
