@@ -2,6 +2,7 @@
 # scripts read their identity keys here. See FuguBSD/Tooling.
 sync.pack org
 sync.pack perl
+sync.pack web
 dist.name     App-FuguBench
 dist.module   App::FuguBench
 dist.abstract outfit a FuguBSD checkout for a coding agent

@@ -97,9 +97,23 @@ Tooling sync, as a new `scripts/deps` is today.
   `~/.local/bin/fugubench` with mode 755, atomically, and print the path. It
   must print a hint when `PATH` lacks the directory.
 - **DIST-INSTALL-3** — The stable address of the install script is
-  `https://fugubsd.org/get`, and the published command is
-  `curl -fsSL https://fugubsd.org/get | sh`. FuguBSD/Website serves the script
-  of the latest release at that address.
+  `https://bench.fugubsd.org/get`, and the published command is
+  `curl -fsSL https://bench.fugubsd.org/get | sh`. The website of this
+  repository serves a stub at that address. The stub must fetch the `install.sh`
+  of the latest release into a variable, and it must then run that variable. The
+  stub holds no version and no digest, so a release needs no change of the
+  website.
+- **DIST-INSTALL-4** — The stub must download with the first of `curl`, `wget`,
+  and `ftp` on `PATH`, in that order. The download must follow each redirect,
+  because the latest-release path answers one. It must stop at an HTTP error
+  status, so no error page of the server reaches the shell. It must make no
+  second try into standard output, because a second try appends to a partial
+  body. An empty text is then the mark of a failed fetch, and the stub reads no
+  exit code number.
+- **DIST-INSTALL-5** — The stub must fit in 30 lines. A visitor reads the stub
+  before the visitor runs it, and one screen holds it.
+- **DIST-INSTALL-6** — Without a downloader on `PATH`, the stub must name the
+  three commands and exit non-zero.
 
 <a id="dist-update"></a>
 

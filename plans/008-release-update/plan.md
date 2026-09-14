@@ -8,7 +8,6 @@ Proposed. It lands last, after each wait below. Nothing lands now.
   perl floor of `scripts/dist`.
 - Repositories: the `release_repos` entry of FuguBench.
 - Fugu: a release that carries Fugu LIB-CURL and Fugu LIB-ED25519.
-- Website: the `/get` address of DIST-INSTALL-3.
 
 Implements: DIST-ASSETS. Implements: DIST-UPDATE. Implements: DIST-KEY. The
 `update` verb verifies with the embedded keys alone, so DIST-KEY-2 holds with
@@ -36,13 +35,13 @@ In scope:
 - The `update` verb, `App::FuguBench::Update`, with its sandbox row.
 - The loopback tests of the verb, with a committed fixture key pair.
 - The first tag, `v0.1.0`.
+- The install command of the front page, in `web/index.body.html`.
 
 Out of scope:
 
 - The pack, the shim, `install.sh`, the `install` verb, and the keys module.
   Each one exists already.
 - The shared workflow of Tooling, and the PAUSE secrets of Repositories.
-- The `/get` page of FuguBSD/Website.
 
 ## Constraints that shape the design
 
