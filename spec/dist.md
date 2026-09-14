@@ -56,16 +56,24 @@ Tooling sync, as a new `scripts/deps` is today.
 
 - **DIST-SHIM-1** — `fugubench shim` must print the shim to standard output. The
   shim is POSIX shell. It holds the download URL and the sha256 digest of the
-  packed file of the version that printed it.
+  packed file of the version that printed it. The verb writes the version into
+  shell text, so it must refuse a version that is no dotted-decimal number.
 - **DIST-SHIM-2** — When `FUGUBENCH` names an executable in the environment, the
   shim must run it and nothing else. A developer points it at `bin/fugubench` of
-  a checkout.
+  a checkout. When that variable holds a value that names no executable, the
+  shim must report the value and exit non-zero. It must not download the release
+  instead, because the developer named the file. An empty value names no
+  executable. The shim must therefore test for a set variable, and not for a
+  non-empty one.
 - **DIST-SHIM-3** — The shim must run the cached file
   `~/.cache/fugubench/<version>/fugubench` when it exists. Otherwise it must
   download the packed file with the first of `curl`, `wget`, and `ftp` on
-  `PATH`. It must hold the file to the digest with `sha256`, `shasum -a 256`, or
-  `sha256sum`. It must move the file into the cache atomically, with mode 755,
-  and then run it.
+  `PATH`. The download must follow each redirect, because a release asset
+  answers one. It must hold the file to the digest with `sha256`,
+  `shasum -a 256`, or `sha256sum`. It must move the file into the cache
+  atomically, with mode 755, and then run it. The shim must set each variable of
+  that selection itself. No value of the environment can then pass for a tool or
+  for a digest.
 - **DIST-SHIM-4** — A failed check must delete the download, print the expected
   and the computed digest, and exit non-zero.
 - **DIST-SHIM-5** — The shim must pass every argument through unchanged, and it
@@ -79,10 +87,12 @@ Tooling sync, as a new `scripts/deps` is today.
 
 ## The install script and the install verb
 
-- **DIST-INSTALL-1** — `install.sh` is a release asset that the workflow writes
-  for its version. It is POSIX shell, and it holds the URL and the sha256 digest
-  of the packed file of that version. It must fetch, verify, and run
-  `fugubench install`, and nothing else.
+- **DIST-INSTALL-1** — `install.sh` is an asset that `make dist` writes for its
+  version, and the release workflow publishes. It must be the shim of DIST-SHIM
+  with `install` as its argument list. The download, the digest check, and the
+  cache are then those of the shim. A build of a tree with no tag carries the
+  version `0.0.0`. No release holds that version, so such a build must write no
+  install script.
 - **DIST-INSTALL-2** — `fugubench install` must copy the running program to
   `~/.local/bin/fugubench` with mode 755, atomically, and print the path. It
   must print a hint when `PATH` lacks the directory.
@@ -113,7 +123,7 @@ Tooling sync, as a new `scripts/deps` is today.
 
 - **DIST-KEY-1** — The program must embed the release public keys of the
   organization, in trust order, in one module. The keys are those of
-  `deps/KEYS.txt` of the org pack at build time.
+  `deps/KEYS.txt` of the org pack, and a test must hold the module to that file.
 - **DIST-KEY-2** — `update` verifies with the embedded keys alone. `deps`
   verifies with the keys of the consumer, per DEPS-KEYS, and never with the
   embedded keys. A consumer decides what it trusts.
