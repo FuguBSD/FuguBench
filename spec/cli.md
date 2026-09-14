@@ -154,10 +154,12 @@ starts a comment.
   the paths of its row. A row names the checkout root, the install directory of
   DEPS-INSTALL-6, and the cache directory of DIST-SHIM. A row also names one
   temporary directory, the perl library directories, the directory of the
-  running file, and the trace root. It must unveil nothing else. The three verbs
-  that unveil are `shim`, `install`, and `traces`. Every other verb unveils
-  nothing, `deps` among them. The verbs `wiki`, `hook`, `deps`, `fetch`, and
-  `update` add a network promise.
+  running file, and the trace root. It must unveil nothing else. A row must name
+  each path once, because unveil(2) returns EPERM on a second entry that widens
+  a path. Two entries of a row can name one path, so the row must keep the wider
+  entry alone. The three verbs that unveil are `shim`, `install`, and `traces`.
+  Every other verb unveils nothing, `deps` among them. The verbs `wiki`, `hook`,
+  `deps`, `fetch`, and `update` add a network promise.
 - **CLI-SANDBOX-3** — A verb that opens no file must pledge `stdio` and must
   unveil nothing. `stdio` denies open(2), so an unveil under it opens no file
   and hides no file. `version` is that verb.

@@ -96,7 +96,14 @@ output.
 =head2 install_paths
 
 C<install_paths> returns the unveil list of the C<install> row: the
-list of the C<shim> row, and the install directory.
+library directories of the interpreter, the directory of the running
+file, and the install directory. The verb reads that file and writes
+the copy.
+
+The install directory holds the running file after an install. Two
+entries then name one directory. unveil(2) returns EPERM on a second
+entry that widens a path, so the row keeps the wider entry alone. Its
+C<rwc> mode reads as well, so the row loses nothing.
 
 The method makes the install directory. unveil(2) hides every path
 that the list leaves out, and the list can name the install
