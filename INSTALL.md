@@ -2,13 +2,10 @@
 
 FuguBench runs on core Perl v5.34 or later. One packed Perl file holds every
 verb, and it carries the Fugu modules that it uses, so it loads no CPAN module.
-Two flows install the program: the install script, and CPAN with cpanm. Both
-wait on the first release. A checkout runs `bin/fugubench` today.
+Two flows install the program: the install script, and CPAN with cpanm. A
+checkout runs `bin/fugubench` of the tree.
 
 ## With the install script
-
-No release exists today, so this flow fetches no install script and it stops
-with an error. It works from the first tag.
 
 ```sh
 curl -fsSL https://bench.fugubsd.org/get | sh
@@ -26,8 +23,8 @@ refuses a release below the running version, unless the operator passes
 
 ## From CPAN
 
-Every release goes to CPAN as the `App-FuguBench` distribution. No release
-exists today, so CPAN holds none, and this flow works from the first tag. The
+Every release goes to CPAN as the `App-FuguBench` distribution. PAUSE indexes an
+upload on its own schedule, so a new version reaches CPAN after the release. The
 distribution names Fugu as a prerequisite, so one name installs both:
 
 ```sh
