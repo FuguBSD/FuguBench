@@ -1,0 +1,30 @@
+#!/bin/sh
+# The install address of FuguBench: https://bench.fugubsd.org/get
+#
+# The stub fetches the install.sh of the latest release into a
+# variable, and it then runs that variable. A pipe into sh hides a
+# failed fetch: sh reads an empty script and exits 0.
+#
+# The latest-release path answers with a redirect, so curl needs -L.
+# curl needs -f too: an HTTP error then writes no error page in place
+# of the script. wget and the ftp(1) of OpenBSD follow a redirect and
+# stop at such a status themselves. So an empty text is the mark of a
+# failed fetch, and the stub reads no exit code number.
+
+url=https://github.com/FuguBSD/FuguBench/releases/latest/download/install.sh
+
+tool=
+for name in curl wget ftp; do
+	command -v "$name" >/dev/null 2>&1 && { tool=$name; break; }
+done
+
+case $tool in
+curl)	set -- curl -fsSL "$url" ;;
+wget)	set -- wget -q -O - "$url" ;;
+ftp)	set -- ftp -V -o - "$url" ;;
+*)	echo 'fugubench: no curl, wget, or ftp on PATH' >&2; exit 1 ;;
+esac
+
+script=$("$@") || script=
+[ -n "$script" ] || { echo "fugubench: no install script at $url" >&2; exit 1; }
+printf '%s\n' "$script" | sh
