@@ -1,0 +1,355 @@
+#!/usr/bin/env perl
+# ex:ts=8 sw=4:
+# $OpenBSD$
+#
+# Copyright (c) 2026 Dick Olsson <hi@senzilla.io>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+# pack: build the one-file program of this repository (DIST-PACK),
+# and the install script of its release (DIST-INSTALL-1).
+#
+# usage: pack [--version X.Y] [--out DIR]
+#
+# The script runs scripts/dist with the same values first, and it
+# packs the tarball that the build writes (DIST-PACK-7). mk/local.mk
+# sets DIST, so make dist runs this script in place of scripts/dist.
+#
+# scripts/dist removes its staged tree, so the script extracts the
+# tarball into a temporary directory and reads the stamped modules
+# there. The stamp carries the version into the pack, and
+# `fugubench version` prints it.
+#
+# The Fugu snapshot is the installed Fugu that deps/<OS>.txt names
+# (DIST-PACK-6). The script loads each module of the list below and
+# copies the file that %INC names. The list is explicit, because a
+# trace of one run follows one verb and misses the rest
+# (DIST-PACK-2).
+#
+# install.sh is the shim of the release with one argument list, so
+# the script runs the packed file with `shim` and keeps that text.
+# The shim verb reads the digest of the file that runs, so the script
+# pins the pack that sits beside it.
+#
+# A build of a tree with no tag carries the version 0.0.0. No release
+# holds it, so the shim of such a pack pins nothing. The script then
+# writes no install script, and it reports that on standard error.
+#
+# The script uses core modules alone, and it writes nothing to
+# standard output.
+
+use v5.34;
+use warnings;
+use experimental 'signatures';
+no feature qw(indirect multidimensional bareword_filehandles);
+
+use File::Find   ();
+use File::Path   qw(make_path);
+use File::Spec   ();
+use File::Temp   ();
+use Getopt::Long qw(GetOptions);
+
+# The Fugu modules of the pack: the modules that CLI-FUGU-1 names,
+# and the closure of those modules over their own use lines. Fugu
+# itself holds no code, and it carries the version of the library.
+# t/fugubench/pack.t computes the closure from the sources and holds
+# the pack to it.
+my @FUGU = qw(
+    Fugu
+    Fugu::CLI
+    Fugu::Curl
+    Fugu::Ed25519
+    Fugu::File
+    Fugu::Log
+    Fugu::Process
+    Fugu::Sandbox
+    Fugu::Signer
+    Fugu::Signify
+);
+
+# The heredoc terminator of a module body. Every packed line carries
+# two leading spaces, so no line of a source can end a heredoc.
+use constant MARK => 'FUGUBENCH_PACK';
+
+# The version of a build that no release stamped. scripts/dist writes
+# it into a build of a tree with no tag (DIST-VERSION-1).
+use constant NO_STAMP => '0.0.0';
+
+# The mode of the two artifacts. Each one is a program.
+use constant MODE => 0755;
+
+my $version;
+my $out = 'build';
+
+GetOptions(
+	'version=s' => \$version,
+	'out=s'     => \$out,
+) or die "usage: pack [--version X.Y] [--out DIR]\n";
+
+# An empty value counts as absent, as in scripts/dist. The dist
+# target of mk/perl.mk always passes the flag.
+undef $version if defined $version && $version eq '';
+
+-f 'scripts/dist'
+    or die "pack: run me at the repository root\n";
+
+# _read($path):
+#	The whole text of one file.
+sub _read ($path)
+{
+	open my $fh, '<', $path or die "pack: read $path: $!\n";
+	local $/ = undef;
+	my $text = <$fh>;
+	close $fh;
+
+	return $text;
+}
+
+# _build($version, $out):
+#	Run scripts/dist with the same values, and return the path of
+#	the tarball that it reports. The perl of this process runs the
+#	build, so one interpreter builds both artifacts.
+sub _build ( $version, $out )
+{
+	my @cmd = (
+		$^X,     'scripts/dist', '--version', $version // q{},
+		'--out', $out
+	);
+
+	open my $fh, '-|', @cmd or die "pack: cannot run scripts/dist: $!\n";
+	my @lines = <$fh>;
+	close $fh or die 'pack: scripts/dist exited ' . ( $? >> 8 ) . "\n";
+
+	my ($tarball) = map { /^Built (.+)$/ ? $1 : () } @lines;
+	defined $tarball
+	    or die "pack: scripts/dist named no tarball\n";
+
+	return $tarball;
+}
+
+# _extract($tarball, $dir):
+#	Extract the tarball into $dir, and return the staged tree. The
+#	tarball holds one directory, and its name is the name of the
+#	tarball without the suffix.
+sub _extract ( $tarball, $dir )
+{
+	my $status = system 'tar', '-xzf', $tarball, '-C', $dir;
+	$status == 0
+	    or die 'pack: tar exited ' . ( $status >> 8 ) . "\n";
+
+	my ( undef, undef, $base ) = File::Spec->splitpath($tarball);
+	$base =~ s/\.tar\.gz\z//
+	    or die "pack: '$tarball' is no .tar.gz path\n";
+
+	my $stage = File::Spec->catdir( $dir, $base );
+	-d $stage or die "pack: the tarball holds no $base directory\n";
+
+	return $stage;
+}
+
+# _app_modules($stage):
+#	The modules of the program, from the staged tree. The key of
+#	each one is its require name, as %INC holds it. scripts/dist
+#	stamped the version into every package there.
+sub _app_modules ($stage)
+{
+	my $lib = File::Spec->catdir( $stage, 'lib' );
+
+	my %source;
+	File::Find::find(
+		sub {
+			return unless -f $_ && /\.pm\z/;
+			my $name =
+			    File::Spec->abs2rel( $File::Find::name, $lib );
+			$source{$name} = _read($File::Find::name);
+		},
+		$lib
+	);
+
+	%source or die "pack: the tarball holds no module\n";
+
+	return %source;
+}
+
+# _fugu_modules():
+#	The Fugu snapshot. The script loads each module of @FUGU and
+#	copies the file that %INC names, so the pack carries the
+#	installed release and its stamped $VERSION.
+sub _fugu_modules ()
+{
+	my %source;
+	for my $module (@FUGU) {
+		my $name = ( $module =~ s{::}{/}gr ) . '.pm';
+		eval { require $name; 1 }
+		    or die "pack: cannot load $module: $@";
+		my $path = $INC{$name}
+		    or die "pack: no file for $module\n";
+		$source{$name} = _read($path);
+	}
+
+	return %source;
+}
+
+# _program($stage):
+#	The text of bin/fugubench, without the lines that a checkout
+#	needs. The shebang of the pack replaces the shebang of the
+#	file. The FindBin and lib lines put lib/ of a checkout in
+#	front of the pack, so a packed file beside such a tree would
+#	load the modules of the tree and report its version. The pack
+#	carries every module of the program, so it needs neither line.
+sub _program ($stage)
+{
+	my $text = _read( File::Spec->catfile( $stage, 'bin', 'fugubench' ) );
+
+	my @lines = split /^/, $text;
+	shift @lines if @lines && $lines[0] =~ m{\A\#!};
+
+	return join q{}, grep { !m{\A\s*use\s+(?:FindBin|lib)\b} } @lines;
+}
+
+# _pack(\%source, $program):
+#	The text of the packed file. A BEGIN block holds the source of
+#	every module in a hash, and an @INC hook serves it. The text
+#	of the program follows.
+#
+#	Every packed line carries two leading spaces, so no line of a
+#	source ends a heredoc. The block strips them back before it
+#	installs the hook.
+#
+#	The modules sort by name, and no timestamp and no path of the
+#	build host enters the text, so one tree gives one byte
+#	sequence (DIST-PACK-4).
+#
+#	The BEGIN block runs before the version pragma of the program,
+#	so its code holds no signature and no feature of a later perl.
+sub _pack ( $source, $program )
+{
+	my $mark = MARK;
+	my $text = <<"HEAD";
+#!/usr/bin/env perl
+# The packed program of FuguBench. scripts/pack writes it from a
+# release tarball and the installed Fugu, and no hand edits it.
+
+BEGIN {
+my %source;
+
+HEAD
+
+	for my $name ( sort keys %$source ) {
+		my $body = $source->{$name};
+		$body .= "\n" unless substr( $body, -1 ) eq "\n";
+		$body =~ s/^/  /mg;
+		$text .= "\$source{'$name'} = <<'$mark';\n$body$mark\n\n";
+	}
+
+	$text .= <<'HOOK';
+s/^  //mg for values %source;
+
+unshift @INC, sub {
+	my $body = $source{ $_[1] };
+	return unless defined $body;
+	open my $fh, '<', \$body or return;
+	return $fh;
+};
+}
+
+HOOK
+
+	return $text . $program;
+}
+
+# _write($path, $text):
+#	Write one artifact of the out directory. Both artifacts are
+#	programs, so each one takes the mode of a program.
+sub _write ( $path, $text )
+{
+	open my $fh, '>', $path or die "pack: write $path: $!\n";
+	print {$fh} $text;
+	close $fh or die "pack: close $path: $!\n";
+	chmod MODE, $path or die "pack: chmod $path: $!\n";
+
+	return;
+}
+
+# _release($tarball):
+#	The version of the tarball that scripts/dist built. The name
+#	of the tarball carries it, and the stamp of the staged
+#	modules holds the same value.
+sub _release ($tarball)
+{
+	$tarball =~ /-([0-9]+(?:\.[0-9]+)+)\.tar\.gz\z/
+	    or die "pack: '$tarball' names no version\n";
+
+	return $1;
+}
+
+# _shim($packed):
+#	The shim text of one packed file, from the `shim` verb of that
+#	file. The verb reads the digest of the file that runs, so the
+#	text pins the pack that the script wrote (DIST-SHIM-1).
+sub _shim ($packed)
+{
+	open my $fh, '-|', $^X, $packed, 'shim'
+	    or die "pack: cannot run $packed: $!\n";
+	local $/ = undef;
+	my $text = <$fh>;
+	close $fh or die 'pack: the shim verb exited ' . ( $? >> 8 ) . "\n";
+
+	return $text;
+}
+
+# _script($version, $shim):
+#	The text of install.sh: the shim of the release, with one
+#	argument list in front of it (DIST-INSTALL-1). `set --` writes
+#	that list, and the shim execs the packed file with it. So the
+#	download, the digest check, and the cache are those of the
+#	shim.
+sub _script ( $version, $shim )
+{
+	return <<"HEAD" . $shim;
+#!/bin/sh
+# The install script of fugubench $version. scripts/pack writes it
+# beside the packed file, and the release workflow publishes it. The
+# text below is the shim of this release, and the argument list makes
+# the shim run `fugubench install`.
+set -- install
+HEAD
+}
+
+my $tarball = _build( $version, $out );
+my $dir     = File::Temp->newdir(
+	TEMPLATE => 'fugubench-pack-XXXXXXXX',
+	TMPDIR   => 1
+);
+my $stage = _extract( $tarball, "$dir" );
+
+my %source = ( _app_modules($stage), _fugu_modules() );
+my $text   = _pack( \%source, _program($stage) );
+
+make_path($out);
+my $packed = File::Spec->catfile( $out, 'fugubench' );
+_write( $packed, $text );
+
+# The install script pins one release, and it takes the pin from the
+# shim of the pack. A pack of a tree with no tag carries a version
+# that no release holds, so its shim pins nothing.
+my $release = _release($tarball);
+if ( $release eq NO_STAMP ) {
+	warn "pack: no release holds version $release,"
+	    . " so this build writes no install.sh\n";
+}
+else {
+	_write(
+		File::Spec->catfile( $out, 'install.sh' ),
+		_script( $release, _shim($packed) ) );
+}
