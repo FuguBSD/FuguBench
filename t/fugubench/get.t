@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 # ex:ts=8 sw=4:
-# The stub of the install address, web/get (DIST-INSTALL-3).
+# The stub of the install address, web/get (DIST-INSTALL-3 to
+# DIST-INSTALL-6).
 #
 # Each case runs web/get as a child of /bin/sh. The whole PATH of the
 # child is the bin directory of a temporary tree, and that directory
@@ -37,9 +38,26 @@ plan skip_all => 'no web/get' unless -f $get;
 my $URL =
     'https://github.com/FuguBSD/FuguBench/releases/latest/download/install.sh';
 
-# The line bound of the stub. A visitor reads the file before the
-# visitor runs it, and one screen holds it.
+# The line bound of the stub (DIST-INSTALL-5). A visitor reads the
+# file before the visitor runs it, and one screen holds it.
 my $MAX_LINES = 30;
+
+# The argument list that the stub builds for each downloader
+# (DIST-INSTALL-4). curl takes -f, so an HTTP error writes no error
+# page, and -L, so it follows the redirect of the latest-release
+# path. wget takes --tries=1, so no retry appends to standard output.
+# Each tool writes the body to standard output.
+my %COMMAND = (
+	curl => "curl -fsSL $URL",
+	wget => "wget -q --tries=1 -O - $URL",
+	ftp  => "ftp -V -o - $URL",
+);
+
+# The value that the install script writes into the marker. It holds
+# a backslash, because a transport that reads an escape changes it:
+# the echo of a POSIX shell turns \t into a tab, and printf '%s'
+# leaves the two bytes alone.
+my $TOKEN = 'in\tstalled';
 
 # The commands that the bin directory of a tree holds beside the
 # stub. web/get runs sh, and a host whose sh holds no printf builtin
@@ -79,12 +97,17 @@ sub _stub ( $tree, $name, @body )
 }
 
 # _install($tree):
-#	One install script of two lines. The first line sets a
-#	variable, and the second writes it to the marker. A marker
-#	with the value proves that both lines reached sh.
+#	One install script of three lines. The first line is the word
+#	-n alone, which the echo of a shell can read as an option; sh
+#	reports it as an absent command and runs the rest. The next
+#	lines set a variable that holds a backslash, and write it to
+#	the marker with printf. A marker with the exact bytes proves
+#	that every byte of the script reached sh.
 sub _install ($tree)
 {
-	return "token=installed\necho \"\$token\" > '$tree/marker'\n";
+	return "-n\n"
+	    . "token='$TOKEN'\n"
+	    . "printf '%s\\n' \"\$token\" > '$tree/marker'\n";
 }
 
 # _print($tree, $text):
@@ -128,8 +151,8 @@ cmp_ok( ( $text =~ tr/\n// ),
 	'<=', $MAX_LINES, "web/get holds at most $MAX_LINES lines" );
 
 # One stub downloader of each name, in the order of the search. The
-# stub prints the install script, and sh runs it.
-my %ran;
+# stub prints the install script, sh runs it, and the log holds the
+# whole argument list that the stub built.
 for my $name (qw(curl wget ftp)) {
 	my $tree = _tree();
 	_stub( $tree, $name, _print( $tree, _install($tree) ) );
@@ -137,14 +160,10 @@ for my $name (qw(curl wget ftp)) {
 	my $result = _run($tree);
 	is( $result->{exit_code}, 0, "$name: the stub exits 0" );
 	is( Fugu::File->read("$tree/marker"),
-		"installed\n", "$name: sh ran every line of the script" );
-	$ran{$name} = _log($tree);
-	like( $ran{$name}, qr/\A\Q$name\E /, "$name: the stub ran $name" );
+		"$TOKEN\n", "$name: sh ran the script byte for byte" );
+	is( _log($tree), "$COMMAND{$name}\n",
+		"$name: the stub runs $COMMAND{$name}" );
 }
-
-# The argument list of curl ends with the URL of DIST-INSTALL-3.
-my @args = split q{ }, $ran{curl} // q{};
-is( $args[-1], $URL, 'curl fetches the install.sh of the latest release' );
 
 # The asset of a release answers 302. curl without -L then exits 0
 # and writes nothing, so this stub holds that answer: it prints the
@@ -165,7 +184,30 @@ is( $args[-1], $URL, 'curl fetches the install.sh of the latest release' );
 	my $result = _run($tree);
 	is( $result->{exit_code}, 0, 'the fetch follows a redirect' );
 	is( Fugu::File->read("$tree/marker"),
-		"installed\n", 'the script of the redirect reaches sh' );
+		"$TOKEN\n", 'the script of the redirect reaches sh' );
+}
+
+# An absent asset answers 404. curl without -f then writes the error
+# page of the server to standard output and exits 0, and a non-empty
+# page passes the emptiness guard. This stub holds that answer, and
+# it makes the error page the install script: a marker then proves
+# that the page of an HTTP error reached sh.
+{
+	my $tree = _tree();
+	_stub(
+		$tree, 'curl',
+		'fail=',
+		'for a in "$@"; do',
+		"\tcase \$a in -*f*|--fail) fail=1 ;; esac",
+		'done',
+		'[ -n "$fail" ] && exit 22',
+		_print( $tree, _install($tree) ),
+	);
+
+	my $result = _run($tree);
+	isnt( $result->{exit_code}, 0, 'an HTTP error stops the stub' );
+	ok( !-e "$tree/marker", 'the page of an HTTP error reaches no sh' );
+	like( $result->{stderr}, qr/\Q$URL\E/, 'the reason names the URL' );
 }
 
 # A failed fetch. The stub writes nothing and exits 1. A pipe of the
@@ -199,10 +241,10 @@ is( $args[-1], $URL, 'curl fetches the install.sh of the latest release' );
 	is( $result->{exit_code}, 3, 'the stub exits with the code of sh' );
 }
 
-# No downloader on PATH. The bin directory holds the linked commands
-# and no stub.
+# No downloader on PATH (DIST-INSTALL-6). The bin directory holds the
+# linked commands and no stub.
 {
-	my $tree  = _tree();
+	my $tree   = _tree();
 	my $result = _run($tree);
 	isnt( $result->{exit_code}, 0, 'no downloader stops the stub' );
 	like(

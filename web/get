@@ -7,9 +7,9 @@
 #
 # The latest-release path answers with a redirect, so curl needs -L.
 # curl needs -f too: an HTTP error then writes no error page in place
-# of the script. wget and the ftp(1) of OpenBSD follow a redirect and
-# stop at such a status themselves. So an empty text is the mark of a
-# failed fetch, and the stub reads no exit code number.
+# of the script. wget needs --tries=1, because a retry appends to
+# standard output. wget and the ftp(1) of OpenBSD follow a redirect
+# and stop at an error status themselves.
 
 url=https://github.com/FuguBSD/FuguBench/releases/latest/download/install.sh
 
@@ -20,7 +20,7 @@ done
 
 case $tool in
 curl)	set -- curl -fsSL "$url" ;;
-wget)	set -- wget -q -O - "$url" ;;
+wget)	set -- wget -q --tries=1 -O - "$url" ;;
 ftp)	set -- ftp -V -o - "$url" ;;
 *)	echo 'fugubench: no curl, wget, or ftp on PATH' >&2; exit 1 ;;
 esac
