@@ -123,6 +123,9 @@ Tooling sync, as a new `scripts/deps` is today.
   and `SHA256.sig` of the latest release, or of the named tag. It must verify
   the signature with the embedded keys (DIST-KEY). It must then fetch the packed
   file, hold it to the manifest digest, and replace the running file atomically.
+  `FUGUBENCH_RELEASE_URL` must replace `https://github.com/FuguBSD/FuguBench` in
+  each download address of the verb. A test and a developer point the verb at
+  another server with it.
 - **DIST-UPDATE-2** — The verb must refuse a version below the running one,
   unless `--allow-downgrade` is set. A replay of an earlier release is the
   attack that the refusal stops.

@@ -38,6 +38,7 @@ use App::FuguBench::Doctor;
 use App::FuguBench::Fetch;
 use App::FuguBench::Hook;
 use App::FuguBench::Traces;
+use App::FuguBench::Update;
 use App::FuguBench::Version;
 use App::FuguBench::Wiki;
 use App::FuguBench::Worktree;
@@ -70,6 +71,7 @@ my @VERBS = (
 	[ 'fetch',    'App::FuguBench::Fetch' ],
 	[ 'shim',     'App::FuguBench::Dist' ],
 	[ 'install',  'App::FuguBench::Dist' ],
+	[ 'update',   'App::FuguBench::Update' ],
 );
 
 # The sandbox row of each verb (CLI-SANDBOX). A row names the pledge
@@ -117,6 +119,12 @@ my @VERBS = (
 # `fetch` runs the downloader of Fugu::Curl as a child, which writes
 # its file beside the destination and renames it. So the row holds
 # the promises of `deps`, and it unveils nothing.
+#
+# `update` runs that downloader as well, so its row unveils nothing
+# too. It replaces the running file where that file sits, so no path
+# list bounds the write. The file promises serve the replace, `fattr`
+# serves the mode of the new program, and `inet dns` serves each
+# download.
 my %SANDBOX = (
 	doctor => { promises => 'stdio rpath proc exec' },
 	hook   => {
@@ -149,6 +157,9 @@ my %SANDBOX = (
 		unveil   => sub ($app) {
 			return App::FuguBench::Dist->install_paths($app);
 		},
+	},
+	update => {
+		promises => 'stdio rpath wpath cpath fattr proc exec inet dns'
 	},
 );
 
