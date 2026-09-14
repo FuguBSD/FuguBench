@@ -45,8 +45,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # The shape check reads the tags that the repository holds,
-          # so it needs the history.
+          # The existence check reads the tags that the repository
+          # holds, so it needs the history. The shape check reads the
+          # input alone.
           fetch-depth: 0
 
       # A version of the wrong shape would name a tag that the release
@@ -95,7 +96,7 @@ jobs:
       assets: fugubench install.sh
       install-note:
         "Install the packed file with `curl -fsSL https://bench.fugubsd.org/get
-        | sh`, or install the distribution from CPAN:"
+        | sh`, or install this release tarball:"
       pause: true
       # A dispatch names the tag, because the ref of the run is the
       # branch. An empty value on a push keeps the ref of the push.
