@@ -53,7 +53,8 @@ failure.
 
 It resolves the running file. A file under the shim cache is a
 refusal, and the message names the sync of the org pack as the path
-to a new version.
+to a new version. An unset C<HOME> is a refusal as well, because the
+cache path starts with that value.
 
 =item 2.
 
@@ -118,7 +119,8 @@ C<command> returns a hash reference. The body returns 0 after the
 replace. It returns 1 for a failed download, a signature that no
 embedded key verifies, a manifest that names no single versioned
 tarball, a refused downgrade, a digest that does not match, a
-running file under the shim cache, and a failed write. It returns 2
+running file under the shim cache, an unset C<HOME>, and a failed
+write. It returns 2
 for a command line that holds an argument, and for a tag of another
 shape.
 

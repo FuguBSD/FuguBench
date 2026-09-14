@@ -134,7 +134,8 @@ Tooling sync, as a new `scripts/deps` is today.
 - **DIST-UPDATE-3** — The verb must refuse to replace a file under the shim
   cache. It must name the Tooling sync as the path to a new version there. The
   cache path carries the version, so a replaced file would fail the digest of
-  the shim.
+  the shim. The cache path starts with `HOME`, so the verb must refuse when that
+  variable is unset or empty. It cannot find the cache then.
 - **DIST-UPDATE-4** — The result line of the verb is `fugubench <version>`, and
   the version is the version of the release that the verb took (CLI-PROGRAM-7).
   The verb must print that line after the replace. A failed update must print no

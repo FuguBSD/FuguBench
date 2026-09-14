@@ -351,6 +351,8 @@ sub _requests ($case)
 #		url  => $string # FUGUBENCH_RELEASE_URL
 #		lib  => $path   # the library of the child, in place of
 #		                # the one of the running stamp
+#		env  => \%pairs # a change of the environment; an
+#		                # undefined value removes the variable
 #
 #	The umask of the run is 077, so a copy that holds mode 755
 #	after the run took the chmod of the verb.
@@ -363,6 +365,19 @@ sub _update ( $case, %args )
 	copy( $program, $file ) or die "copy $program: $!";
 	chmod 0600, $file or die "chmod $file: $!";
 
+	my %env = (
+		PATH                  => $bin,
+		HOME                  => $home,
+		TMPDIR                => $tmp,
+		FUGUBENCH_RELEASE_URL => $args{url} // _base($case),
+		%LIB,
+	);
+	for my $name ( sort keys %{ $args{env} // {} } ) {
+		my $value = $args{env}{$name};
+		if ( defined $value ) { $env{$name} = $value }
+		else                  { delete $env{$name} }
+	}
+
 	my $old = umask 0077;
 	my $r   = Fugu::Process->run(
 		cmd => [
@@ -370,13 +385,7 @@ sub _update ( $case, %args )
 			$file, 'update', @{ $args{argv} // [] }
 		],
 		cwd => $tree,
-		env => {
-			PATH                  => $bin,
-			HOME                  => $home,
-			TMPDIR                => $tmp,
-			FUGUBENCH_RELEASE_URL => $args{url} // _base($case),
-			%LIB,
-		},
+		env => \%env,
 	);
 	umask $old;
 	die "cannot run $file: $r->{error}\n" if defined $r->{error};
@@ -647,6 +656,30 @@ subtest 'a file of the shim cache is a refusal' => sub {
 
 	# The refusal comes before the first download (DIST-UPDATE-3).
 	is_deeply( [ _requests('cache') ], [], 'and the verb asks no server' );
+};
+
+subtest 'an update without HOME is a refusal' => sub {
+
+	# The shim cache sits under HOME, so the verb cannot find that
+	# cache without the variable. It refuses then, and it replaces
+	# no file of the cache by chance (DIST-UPDATE-3).
+	_release( 'home', 'releases/latest/download', 'v1.3.0' );
+
+	my %case = (
+		'an unset HOME' => undef,
+		'an empty HOME' => q{},
+	);
+	for my $name ( sort keys %case ) {
+		my $r = _update( 'home', env => { HOME => $case{$name} } );
+		is( $r->{exit_code}, 1,   "$name exits 1" );
+		is( $r->{stdout},    q{}, "$name prints no version" );
+		like( $r->{stderr}, qr/HOME is not set/,
+			"$name names the variable" );
+		_unchanged( $r, $name );
+	}
+
+	# The refusal comes before the first download (DIST-UPDATE-3).
+	is_deeply( [ _requests('home') ], [], 'and the verb asks no server' );
 };
 
 subtest 'a tag that names no release reports the tag' => sub {
