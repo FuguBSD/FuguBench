@@ -9,10 +9,11 @@
 # root, as t/fugubench/pack.t does. That build writes install.sh
 # beside the pack, and one case runs that script.
 #
-# A stub downloader on a temporary PATH serves the pack, and it
-# discards every flag. One case serves the pack from a loopback
-# server behind a redirect, and that case runs the downloader of the
-# host, so it reads the real flags. No case reaches the network.
+# A stub downloader on a temporary PATH serves the pack. It reads the
+# output flag, `-o` or `-O`, and it discards every other flag. One
+# case serves the pack from a loopback server behind a redirect, and
+# that case runs the downloader of the host, so it reads the real
+# flags. No case reaches the network.
 #
 # Each case sets HOME to its own temporary tree, reads no operator
 # home, and writes nowhere else. A child that loads the checkout
@@ -529,7 +530,8 @@ subtest 'the shim follows a redirect' => sub {
 	# follows no redirect writes the redirect answer and not the
 	# pack (DIST-SHIM-3). This case runs the downloader of the
 	# host against a loopback server, so it reads the real flags.
-	# Every other case runs a stub that discards them.
+	# Every other case runs a stub that reads the output flag
+	# alone, and discards each other one.
 	my @get = grep { _on_shim_path($_) } qw(curl wget ftp);
 	my @sum = grep { _on_shim_path($_) } qw(sha256 shasum sha256sum);
 	plan skip_all => 'the PATH of the shim holds no downloader,'
@@ -613,6 +615,20 @@ subtest 'FUGUBENCH replaces the download' => sub {
 		'and the message names the value' );
 	ok( !-e $log,     'and it reaches no downloader' );
 	ok( !-e "$home/.cache", 'and it writes no cache' );
+
+	# An empty value is a set value, and it names no executable
+	# (DIST-SHIM-2). `FUGUBENCH=$(command -v fugubench)` writes
+	# one on a failed lookup. A gate that tests the value for
+	# emptiness alone downloads the release, and runs a program
+	# that the developer did not name.
+	my $e = _shell( $home, $bin, $shim,
+		argv => ['version'], FUGUBENCH => q{} );
+	isnt( $e->{exit_code}, 0, 'an empty value exits non-zero' );
+	is( $e->{stdout}, q{}, 'and no program runs' );
+	like( $e->{stderr}, qr/FUGUBENCH= is no executable/,
+		'and the message names the variable' );
+	ok( !-e $log,     'and it reaches no downloader' );
+	ok( !-e "$home/.cache", 'and it writes no cache' );
 };
 
 subtest 'the shim names the downloaders that it wants' => sub {
@@ -661,12 +677,12 @@ subtest 'the shim names the downloaders that it wants' => sub {
 
 subtest 'the shim takes each downloader and each digest tool' => sub {
 
-	# The case above takes the first digest tool of the host, and
-	# that is `sha256` on macOS. So these three runs cover each
-	# downloader and each digest tool of DIST-SHIM-3 by
-	# themselves. PATH holds the stub directory alone, so no tool
-	# of the host takes a branch, and the last pair is the pair
-	# that OpenBSD selects.
+	# The redirect case takes the first downloader and the first
+	# digest tool of the host, and that digest tool is `sha256`
+	# on macOS. So these three runs cover each downloader and
+	# each digest tool of DIST-SHIM-3 by themselves. PATH holds
+	# the stub directory alone, so no tool of the host takes a
+	# branch, and the last pair is the pair that OpenBSD selects.
 	my %tail =
 	    ( sha256 => 'q{}', shasum => '"  $f"', sha256sum => '"  $f"' );
 

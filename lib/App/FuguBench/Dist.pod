@@ -32,13 +32,14 @@ it pins one release. It fits in 60 lines, and a reader audits it in
 one screen.
 
 The script runs the file that C<FUGUBENCH> names, when that value
-names an executable. Otherwise it runs the cached file under
-F<~/.cache/fugubench/>, under the directory of the version. With no
-cached file, it downloads the packed file with the first of C<curl>,
-C<wget>, and C<ftp> on C<PATH>. Each download follows a redirect,
-because a release asset answers one. It computes the digest with the
-first of C<sha256>, C<shasum> and C<sha256sum>. It then sets the
-mode 755 and moves the file into the cache, which is one rename.
+names an executable. With no C<FUGUBENCH> in the environment, it
+runs the cached file under F<~/.cache/fugubench/>, under the
+directory of the version. With no cached file, it downloads the
+packed file with the first of C<curl>, C<wget>, and C<ftp> on
+C<PATH>. Each download follows a redirect, because a release asset
+answers one. It computes the digest with the first of C<sha256>,
+C<shasum> and C<sha256sum>. It then sets the mode 755 and moves the
+file into the cache, which is one rename.
 
 The script passes every argument through, and it exits with the code
 of the program.
@@ -53,7 +54,8 @@ and exit 1.
 
 A C<FUGUBENCH> value that names no executable prints that value and
 exits 1. The script downloads no release then, because the developer
-named the file.
+named the file. An empty value names no executable as well, so the
+script refuses it.
 
 =head2 THE VERSION OF THE SHIM
 

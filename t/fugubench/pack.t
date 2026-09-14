@@ -226,23 +226,29 @@ sub _module_name ($file)
 }
 
 # _minor($pragma):
-#	The minor number of one version pragma. A v-string holds it
-#	in the second field, so `use v5.36;` and `use v5.36.0;` both
-#	name 36. A decimal holds it in three digits of the fraction,
-#	so `use 5.034;` names 34 and `use 5.36;` names 360.
+#	The minor number of one version pragma. A pragma with a `v`
+#	prefix, or with a third field, is a v-string, and a v-string
+#	holds the minor in the second field. So `use v5.36;`,
+#	`use v5.36.0;` and `use 5.36.0;` each name 36. A pragma with
+#	one dot and no prefix is a decimal, and a decimal holds the
+#	minor in three digits of the fraction. So `use 5.034;` names
+#	34, and `use 5.36;` names 360.
 sub _minor ($pragma)
 {
 	return $1 if $pragma =~ /\Av5[.]([0-9]+)/;
+	return $1 if $pragma =~ /\A5[.]([0-9]+)[.]/;
 
-	my ($fraction) = $pragma =~ /\A5[.]([0-9]+)/;
+	my ($fraction) = $pragma =~ /\A5[.]([0-9]+)\z/;
+	die "cannot read the version pragma $pragma\n" unless defined $fraction;
 
 	return 0 + substr( "${fraction}00", 0, 3 );
 }
 
 # _above_floor($source):
 #	Each version pragma of one text that names a perl above the
-#	floor. A pragma takes a v-string or a decimal, and a patch
-#	field or none, so the scan reads four spellings.
+#	floor. A pragma takes a `v` prefix or none, two fields or
+#	three, and a padded fraction or none. The case below holds
+#	the scan to each spelling.
 sub _above_floor ($source)
 {
 	my @above;
@@ -308,16 +314,33 @@ my $text   = _read($packed);
 	my @above = _above_floor($text);
 	is( "@above", q{}, 'every version pragma of the pack names perl 5.34 or less' );
 
-	# The scan reads each spelling, so this case holds it to all
-	# four. A scan that misses one reports a clean pack, and the
-	# register of STATUS.md then overstates its coverage.
-	my $sample = join q{}, map { "$_\n" } 'use v5.34;', 'use v5.34.0;',
-	    'use 5.034;', 'use v5.36;', 'use v5.36.0;', 'use 5.036;',
-	    'use 5.36;';
+	# Each spelling of a version pragma, and the minor number
+	# that perl reads from it. `use 5.34.0;` is a v-string with
+	# no prefix, and a read of its fraction gives 340, which
+	# reports the floor itself as above the floor.
+	my @spelling = (
+		[ 'v5.34',   34 ],
+		[ 'v5.34.0', 34 ],
+		[ '5.34.0',  34 ],
+		[ '5.034',   34 ],
+		[ 'v5.36',   36 ],
+		[ 'v5.36.0', 36 ],
+		[ '5.36.0',  36 ],
+		[ '5.036',   36 ],
+		[ '5.36',    360 ],
+	);
+	is( _minor( $_->[0] ), $_->[1], "the scan reads use $_->[0]; as $_->[1]" )
+	    for @spelling;
+
+	# The scan reads a whole source, so this case holds it to
+	# each spelling there as well. A scan that misreads one
+	# reports a clean pack, and the register of STATUS.md then
+	# overstates its coverage.
+	my $sample = join q{}, map { "use $_->[0];\n" } @spelling;
 	is_deeply(
 		[ _above_floor($sample) ],
-		[ 'v5.36', 'v5.36.0', '5.036', '5.36' ],
-		'and the scan reads each spelling of a version pragma'
+		[ 'v5.36', 'v5.36.0', '5.36.0', '5.036', '5.36' ],
+		'and it flags each spelling above the floor'
 	);
 }
 

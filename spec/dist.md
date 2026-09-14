@@ -62,7 +62,9 @@ Tooling sync, as a new `scripts/deps` is today.
   shim must run it and nothing else. A developer points it at `bin/fugubench` of
   a checkout. When that variable holds a value that names no executable, the
   shim must report the value and exit non-zero. It must not download the release
-  instead, because the developer named the file.
+  instead, because the developer named the file. An empty value names no
+  executable. The shim must therefore test for a set variable, and not for a
+  non-empty one.
 - **DIST-SHIM-3** — The shim must run the cached file
   `~/.cache/fugubench/<version>/fugubench` when it exists. Otherwise it must
   download the packed file with the first of `curl`, `wget`, and `ftp` on

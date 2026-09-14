@@ -210,6 +210,11 @@ sub _digest ( $app, $file )
 #	empty body of the redirect answer. wget and ftp follow a
 #	redirect with no option: scripts/ftp of the org pack fetches
 #	a release asset with each one.
+#
+#	The gate tests FUGUBENCH for a set variable, and not for a
+#	non-empty value. `FUGUBENCH=$(command -v fugubench)` writes
+#	an empty value on a failed lookup, and a download would then
+#	run a program that the developer did not name (DIST-SHIM-2).
 sub _shim ( $app, @argv )
 {
 	my $cli = $app->cli;
@@ -251,9 +256,9 @@ version=@VERSION@
 url=@URL@
 want=@SUM@
 
-if [ -n "${FUGUBENCH:-}" ]; then
+if [ -n "${FUGUBENCH+x}" ]; then
 	if [ -x "$FUGUBENCH" ]; then exec "$FUGUBENCH" "$@"; fi
-	echo "fugubench: $FUGUBENCH is no executable" >&2
+	echo "fugubench: FUGUBENCH=$FUGUBENCH is no executable" >&2
 	exit 1
 fi
 
