@@ -30,17 +30,19 @@
 # The fixtures under t/fugubench/fixtures/update/ hold the public half
 # of one signify key pair and two signed release trees. The tree holds
 # no secret key, because each manifest carries its signature already
-# and no case signs. scratch/make-update-fixture.sh made the set one
-# time, with signify(1), and a new set needs a new pair. These
-# commands run at the repository root, and the secret half lands
-# under gitignored scratch/, never under the fixture tree:
+# and no case signs. These commands made the set one time, with
+# signify(1), and a new set needs a new pair. They run at the
+# repository root, and the secret half lands under gitignored
+# scratch/, never under the fixture tree:
 #
 #	fix=t/fugubench/fixtures/update
 #	signify -G -n -c 'fugubench update fixture' \
 #		-p $fix/keys/fugubench-fixture.pub \
 #		-s scratch/fugubench-fixture.sec
-#	signify -S -s scratch/fugubench-fixture.sec \
-#		-m $fix/v1.3.0/SHA256 -x $fix/v1.3.0/SHA256.sig
+#	for v in v1.3.0 v1.1.0; do
+#		signify -S -s scratch/fugubench-fixture.sec \
+#			-m $fix/$v/SHA256 -x $fix/$v/SHA256.sig
+#	done
 #
 # The key signs the two fixture releases and nothing else. It is no
 # key of the organization, and one case holds it apart from the

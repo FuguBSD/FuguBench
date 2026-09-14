@@ -12,8 +12,8 @@ App::FuguBench::Dist - the shim verb and the install verb of fugubench
 
 B<App::FuguBench::Dist> holds the C<shim> verb and the C<install>
 verb. A consumer runs the program through a wrapper shim, and that
-shim holds the version that it runs. The org pack of FuguBSD/Tooling
-syncs the shim into a consumer, so a new version is a new sync.
+shim holds the version that it runs. A later plan of FuguBSD/Tooling
+adds the shim to the org pack, and a new version is then a new sync.
 
 Neither verb reads a checkout, so each one runs in a home with no
 F<.toolingrc>. A fresh clone runs the shim before any install.
