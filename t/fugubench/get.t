@@ -177,6 +177,21 @@ for my $name (qw(curl wget ftp)) {
 		'the search takes curl before wget' );
 }
 
+# A second pair in one tree (DIST-INSTALL-4). The search takes wget
+# before ftp, so the log holds the command of wget alone. The two
+# pairs together pin the whole order.
+{
+	my $tree   = _tree();
+	my $script = _print( $tree, _install($tree) );
+	_stub( $tree, 'wget', $script );
+	_stub( $tree, 'ftp',  $script );
+
+	my $result = _run($tree);
+	is( $result->{exit_code}, 0, 'wget and ftp: the stub exits 0' );
+	is( _log($tree), "$COMMAND{wget}\n",
+		'the search takes wget before ftp' );
+}
+
 # The asset of a release answers 302. curl without -L then exits 0
 # and writes nothing, so this stub holds that answer: it prints the
 # script for an argument list that follows a redirect, and nothing
