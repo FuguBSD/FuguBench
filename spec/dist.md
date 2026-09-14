@@ -37,9 +37,11 @@ script. It also covers the update, the embedded keys, and the version.
   through the shared release workflow of Tooling. The workflow must publish
   `fugubench`, `App-FuguBench-<version>.tar.gz`, `App-FuguBench.tar.gz`,
   `install.sh`, `SHA256`, and `SHA256.sig`.
-- **DIST-ASSETS-2** — The `SHA256` manifest must name each asset by file name,
-  and the release key of the organization must sign it. A consumer verifies the
-  manifest through DEPS-TIER-7.
+- **DIST-ASSETS-2** — The `SHA256` manifest must name the two tarballs, the
+  packed file, and the install script, each by its file name. It must not name
+  itself, and it must not name its own signature. The release key of the
+  organization must sign the manifest, and a consumer verifies the manifest
+  through DEPS-TIER-7.
 - **DIST-ASSETS-3** — The workflow must publish the tarball to PAUSE, so
   `cpanm App::FuguBench` works.
 - **DIST-ASSETS-4** — The version comes from the tag, as Fugu REL-VERSION says,
