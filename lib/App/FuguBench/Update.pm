@@ -257,9 +257,10 @@ sub _release_url ($tag)
 # _outside_cache($app, $file):
 #	Hold the running file out of the shim cache (DIST-UPDATE-3).
 #	The method returns 1 for a file that the verb can replace, and
-#	0 for one under the cache, which it reports. An unset HOME is
-#	a refusal as well, because the cache path starts with that
-#	value and the method cannot find the cache without it.
+#	0 for one under the cache, which it reports. An unset or an
+#	empty HOME is a refusal as well, because the cache path starts
+#	with that value and the method cannot find the cache without
+#	it.
 #
 #	The cache path carries the version, and the shim holds the
 #	cached file to the digest of that version. A replaced file
@@ -275,8 +276,8 @@ sub _outside_cache ( $app, $file )
 {
 	my $home = $ENV{HOME};
 	unless ( defined $home && length $home ) {
-		$app->cli->log->error(
-			'HOME is not set, and the shim cache sits under it');
+		$app->cli->log->error( 'HOME is unset or empty, and the'
+			    . ' shim cache sits under it' );
 		return 0;
 	}
 

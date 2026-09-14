@@ -673,8 +673,8 @@ subtest 'an update without HOME is a refusal' => sub {
 		my $r = _update( 'home', env => { HOME => $case{$name} } );
 		is( $r->{exit_code}, 1,   "$name exits 1" );
 		is( $r->{stdout},    q{}, "$name prints no version" );
-		like( $r->{stderr}, qr/HOME is not set/,
-			"$name names the variable" );
+		like( $r->{stderr}, qr/HOME is unset or empty/,
+			"$name names the variable and both cases" );
 		_unchanged( $r, $name );
 	}
 
