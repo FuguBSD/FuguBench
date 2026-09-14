@@ -13,6 +13,16 @@ once, holds it to a digest, and caches it.</p>
 <p>The program builds on the <a href="https://lib.fugubsd.org/">Fugu</a>
 library, and the pack carries the Fugu modules that it uses.</p>
 
+<h2>Installation</h2>
+
+<p>The install script downloads the latest release, holds it to a
+digest, and copies the program into <code>~/.local/bin</code>:</p>
+
+<pre><code>curl -fsSL https://bench.fugubsd.org/get | sh</code></pre>
+
+<p>Then <code>fugubench update</code> replaces the program with a later
+release.</p>
+
 <h2>Documentation</h2>
 
 <ul>

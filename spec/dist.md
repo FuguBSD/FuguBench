@@ -37,9 +37,11 @@ script. It also covers the update, the embedded keys, and the version.
   through the shared release workflow of Tooling. The workflow must publish
   `fugubench`, `App-FuguBench-<version>.tar.gz`, `App-FuguBench.tar.gz`,
   `install.sh`, `SHA256`, and `SHA256.sig`.
-- **DIST-ASSETS-2** — The `SHA256` manifest must name each asset by file name,
-  and the release key of the organization must sign it. A consumer verifies the
-  manifest through DEPS-TIER-7.
+- **DIST-ASSETS-2** — The `SHA256` manifest must name the two tarballs, the
+  packed file, and the install script, each by its file name. It must not name
+  itself, and it must not name its own signature. The release key of the
+  organization must sign the manifest, and a consumer verifies the manifest
+  through DEPS-TIER-7.
 - **DIST-ASSETS-3** — The workflow must publish the tarball to PAUSE, so
   `cpanm App::FuguBench` works.
 - **DIST-ASSETS-4** — The version comes from the tag, as Fugu REL-VERSION says,
@@ -123,13 +125,21 @@ Tooling sync, as a new `scripts/deps` is today.
   and `SHA256.sig` of the latest release, or of the named tag. It must verify
   the signature with the embedded keys (DIST-KEY). It must then fetch the packed
   file, hold it to the manifest digest, and replace the running file atomically.
+  `FUGUBENCH_RELEASE_URL` must replace `https://github.com/FuguBSD/FuguBench` in
+  each download address of the verb. A test and a developer point the verb at
+  another server with it.
 - **DIST-UPDATE-2** — The verb must refuse a version below the running one,
   unless `--allow-downgrade` is set. A replay of an earlier release is the
   attack that the refusal stops.
 - **DIST-UPDATE-3** — The verb must refuse to replace a file under the shim
   cache. It must name the Tooling sync as the path to a new version there. The
   cache path carries the version, so a replaced file would fail the digest of
-  the shim.
+  the shim. The cache path starts with `HOME`, so the verb must refuse when that
+  variable is unset or empty. It cannot find the cache then.
+- **DIST-UPDATE-4** — The result line of the verb is `fugubench <version>`, and
+  the version is the version of the release that the verb took (CLI-PROGRAM-7).
+  The verb must print that line after the replace. A failed update must print no
+  line.
 
 <a id="dist-key"></a>
 

@@ -9,8 +9,8 @@ core Perl v5.34.
 The program builds on the [Fugu](https://github.com/FuguBSD/Fugu) library, and
 the pack carries the Fugu modules that it uses. `fugubench shim` prints a
 wrapper shim that pins one release. The shim downloads that release once, holds
-it to a digest, and caches it. The specification in [spec/](spec/index.md)
-states the design.
+it to a digest, and caches it. See [INSTALL.md](INSTALL.md) to install it. The
+specification in [spec/](spec/index.md) states the design.
 
 ## Commands
 
