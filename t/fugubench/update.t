@@ -100,8 +100,12 @@ my $tree = tempdir( CLEANUP => 1 );
 my $srv  = "$tree/srv";
 my $tmp  = "$tree/tmp";
 my $bin  = "$tree/bin";
-my $lib  = "$tree/lib";
-make_path( $srv, $tmp, $bin, "$lib/App/FuguBench" );
+make_path( $srv, $tmp, $bin );
+
+# The library directory of a child. _lib makes one for each stamp,
+# and it asserts, so the first call comes after the last skip_all
+# of this file.
+my $lib;
 
 my $requests = "$tree/requests";
 
@@ -149,45 +153,6 @@ sub _entries ($dir)
 # command.
 symlink $downloader->command, "$bin/" . basename( $downloader->command )
     or die "symlink the downloader: $!";
-
-# The library of each child. The copy of App::FuguBench carries the
-# stamp that the dist build writes after the package line, so the
-# child reports the running version that a release would report.
-{
-	my $source = _slurp("$repo/lib/App/FuguBench.pm");
-	my $count  = ( $source =~
-		    s{^package App::FuguBench;$}
-		     {package App::FuguBench;\nour \$VERSION = '$STAMP';}m );
-	is( $count, 1, 'the stamp reaches the package line of App::FuguBench' );
-	Fugu::File->write( "$lib/App/FuguBench.pm", $source )
-	    or die 'write the stamped App::FuguBench';
-}
-
-# The fixture key, as the embedded list of the child. DIST-KEY-2
-# gives the embedded keys to this verb alone, so the child must hold
-# no key of a consumer and no key of the organization.
-my $KEY = ( split /\n/, _slurp("$fixture/keys/fugubench-fixture.pub") )[1];
-{
-	# The heredoc carries its own indentation, because the scan of
-	# t/fugubench/conventions.t reads a package line of this file at
-	# the first column as the package of this file.
-	Fugu::File->write( "$lib/App/FuguBench/Keys.pm", <<~"KEYS" )
-		package App::FuguBench::Keys;
-
-		use v5.34;
-		use warnings;
-		use experimental 'signatures';
-		no feature qw(indirect multidimensional bareword_filehandles);
-
-		sub keys (\$)
-		{
-			return ( [ 'fugubench-fixture', '$KEY' ] );
-		}
-
-		1;
-		KEYS
-	    or die 'write the fixture App::FuguBench::Keys';
-}
 
 # _answer($conn, $path):
 #	Write one response of the server. A path that names no file
@@ -272,6 +237,61 @@ $listen->close;
 
 END { kill 'TERM', $server if $server; }
 
+# The fixture key, as the embedded list of a child. DIST-KEY-2 gives
+# the embedded keys to this verb alone, so a child must hold no key of
+# a consumer and no key of the organization.
+my $KEY = ( split /\n/, _slurp("$fixture/keys/fugubench-fixture.pub") )[1];
+
+# _lib($stamp):
+#	One library directory of a child, first in @INC. It holds a
+#	copy of App::FuguBench with the stamp of a release, as the
+#	dist build writes it, and a copy of App::FuguBench::Keys with
+#	the fixture key in place of the organization keys. So no case
+#	needs a release, and no case reaches an organization key.
+#
+#	The helper asserts, so the first call comes after the last
+#	skip_all of this file. A plan behind an assertion writes
+#	'1..0 # SKIP' after an 'ok' line, and the harness fails then.
+sub _lib ($stamp)
+{
+	my $dir = "$tree/lib-$stamp";
+	make_path("$dir/App/FuguBench");
+
+	my $source = _slurp("$repo/lib/App/FuguBench.pm");
+	my $count  = ( $source =~
+		    s{^package App::FuguBench;$}
+		     {package App::FuguBench;\nour \$VERSION = '$stamp';}m );
+	is( $count, 1,
+		"the stamp $stamp reaches the package line of"
+		    . ' App::FuguBench' );
+	Fugu::File->write( "$dir/App/FuguBench.pm", $source )
+	    or die 'write the stamped App::FuguBench';
+
+	# The heredoc carries its own indentation, because the scan of
+	# t/fugubench/conventions.t reads a package line of this file at
+	# the first column as the package of this file.
+	Fugu::File->write( "$dir/App/FuguBench/Keys.pm", <<~"KEYS" )
+		package App::FuguBench::Keys;
+
+		use v5.34;
+		use warnings;
+		use experimental 'signatures';
+		no feature qw(indirect multidimensional bareword_filehandles);
+
+		sub keys (\$)
+		{
+			return ( [ 'fugubench-fixture', '$KEY' ] );
+		}
+
+		1;
+		KEYS
+	    or die 'write the fixture App::FuguBench::Keys';
+
+	return $dir;
+}
+
+$lib = _lib($STAMP);
+
 # _base($case):
 #	The release address of one case. FUGUBENCH_RELEASE_URL takes
 #	this value, in the place of the host and the repository
@@ -329,6 +349,8 @@ sub _requests ($case)
 #		home => $path   # the HOME of the child
 #		file => $path   # the program that the verb replaces
 #		url  => $string # FUGUBENCH_RELEASE_URL
+#		lib  => $path   # the library of the child, in place of
+#		                # the one of the running stamp
 #
 #	The umask of the run is 077, so a copy that holds mode 755
 #	after the run took the chmod of the verb.
@@ -344,8 +366,8 @@ sub _update ( $case, %args )
 	my $old = umask 0077;
 	my $r   = Fugu::Process->run(
 		cmd => [
-			$^X, "-I$lib", "-I$repo/lib", $file, 'update',
-			@{ $args{argv} // [] }
+			$^X, '-I' . ( $args{lib} // $lib ), "-I$repo/lib",
+			$file, 'update', @{ $args{argv} // [] }
 		],
 		cwd => $tree,
 		env => {
@@ -588,6 +610,23 @@ subtest 'the flag takes the release below the running version' => sub {
 		'and the running file holds the bytes of that release'
 	);
 	is( _mode( $r->{file} ), 0755, 'and it holds mode 755' );
+};
+
+subtest 'the comparison of the versions reads each field as a number' => sub {
+
+	# The release 1.3.0 sits below the running 1.10.0, because the
+	# second field is 3 and 10 (DIST-UPDATE-2). A comparison of the
+	# two strings answers the other way. Every other case runs on
+	# single-digit fields, so this case holds that rule alone.
+	_release( 'ten', 'releases/latest/download', 'v1.3.0' );
+
+	my $r = _update( 'ten', lib => _lib('1.10.0') );
+	is( $r->{exit_code}, 1,   'a lower second field exits 1' );
+	is( $r->{stdout},    q{}, 'and it prints no version' );
+	like( $r->{stderr}, qr/\b1[.]3[.]0\b/,
+		'the message names the version of the release' );
+	like( $r->{stderr}, qr/\b1[.]10[.]0\b/, 'and the running version' );
+	_unchanged( $r, 'a release of a lower second field' );
 };
 
 subtest 'a file of the shim cache is a refusal' => sub {
