@@ -204,6 +204,12 @@ sub _digest ( $app, $file )
 #	values, and each one enters through its token. sprintf takes
 #	no part here, because the text holds a per-cent sign of its
 #	own, in the parameter expansion that cuts the digest.
+#
+#	A release asset answers a redirect, so each download follows
+#	one. curl needs -L for that, and without it curl writes the
+#	empty body of the redirect answer. wget and ftp follow a
+#	redirect with no option: scripts/ftp of the org pack fetches
+#	a release asset with each one.
 sub _shim ( $app, @argv )
 {
 	my $cli = $app->cli;
@@ -245,8 +251,10 @@ version=@VERSION@
 url=@URL@
 want=@SUM@
 
-if [ -x "${FUGUBENCH:-}" ]; then
-	exec "$FUGUBENCH" "$@"
+if [ -n "${FUGUBENCH:-}" ]; then
+	if [ -x "$FUGUBENCH" ]; then exec "$FUGUBENCH" "$@"; fi
+	echo "fugubench: $FUGUBENCH is no executable" >&2
+	exit 1
 fi
 
 dir=$HOME/.cache/fugubench/$version
@@ -272,7 +280,7 @@ if [ ! -x "$file" ]; then
 	tmp=$dir/.download.$$
 	trap 'rm -f "$tmp"' EXIT HUP INT TERM
 	case $get in
-	curl)	curl -fsS -o "$tmp" "$url" ;;
+	curl)	curl -fsSL -o "$tmp" "$url" ;;
 	wget)	wget -q -O "$tmp" "$url" ;;
 	ftp)	ftp -o "$tmp" "$url" ;;
 	esac

@@ -60,14 +60,18 @@ Tooling sync, as a new `scripts/deps` is today.
   shell text, so it must refuse a version that is no dotted-decimal number.
 - **DIST-SHIM-2** — When `FUGUBENCH` names an executable in the environment, the
   shim must run it and nothing else. A developer points it at `bin/fugubench` of
-  a checkout.
+  a checkout. When that variable holds a value that names no executable, the
+  shim must report the value and exit non-zero. It must not download the release
+  instead, because the developer named the file.
 - **DIST-SHIM-3** — The shim must run the cached file
   `~/.cache/fugubench/<version>/fugubench` when it exists. Otherwise it must
   download the packed file with the first of `curl`, `wget`, and `ftp` on
-  `PATH`. It must hold the file to the digest with `sha256`, `shasum -a 256`, or
-  `sha256sum`. It must move the file into the cache atomically, with mode 755,
-  and then run it. The shim must set each variable of that selection itself. No
-  value of the environment can then pass for a tool or for a digest.
+  `PATH`. The download must follow each redirect, because a release asset
+  answers one. It must hold the file to the digest with `sha256`,
+  `shasum -a 256`, or `sha256sum`. It must move the file into the cache
+  atomically, with mode 755, and then run it. The shim must set each variable of
+  that selection itself. No value of the environment can then pass for a tool or
+  for a digest.
 - **DIST-SHIM-4** — A failed check must delete the download, print the expected
   and the computed digest, and exit non-zero.
 - **DIST-SHIM-5** — The shim must pass every argument through unchanged, and it

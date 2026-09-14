@@ -31,12 +31,13 @@ holds the download URL and the sha256 digest of the running file, so
 it pins one release. It fits in 60 lines, and a reader audits it in
 one screen.
 
-The script runs the file that C<FUGUBENCH> names, when the
-environment holds that variable. Otherwise it runs the cached file
-under F<~/.cache/fugubench/>, under the directory of the version.
-With no cached file, it downloads the packed file with the first of
-C<curl>, C<wget>, and C<ftp> on C<PATH>. It computes the digest with
-the first of C<sha256>, C<shasum> and C<sha256sum>. It then sets the
+The script runs the file that C<FUGUBENCH> names, when that value
+names an executable. Otherwise it runs the cached file under
+F<~/.cache/fugubench/>, under the directory of the version. With no
+cached file, it downloads the packed file with the first of C<curl>,
+C<wget>, and C<ftp> on C<PATH>. Each download follows a redirect,
+because a release asset answers one. It computes the digest with the
+first of C<sha256>, C<shasum> and C<sha256sum>. It then sets the
 mode 755 and moves the file into the cache, which is one rename.
 
 The script passes every argument through, and it exits with the code
@@ -50,12 +51,20 @@ expected and the computed value, and it exits 1. An absent
 downloader, and an absent digest tool, each name the three commands
 and exit 1.
 
+A C<FUGUBENCH> value that names no executable prints that value and
+exits 1. The script downloads no release then, because the developer
+named the file.
+
 =head2 THE VERSION OF THE SHIM
 
 The shim pins the release that stamped the program. A checkout
 carries no stamp, and a build of a tree with no tag carries C<0.0.0>.
 No release holds either one, so the verb reports and returns 1. The
 message names the packed file of a release as the place to run it.
+
+The verb writes the version into shell text. So it refuses a version
+that is no dotted-decimal number, and it returns 1. A value with a
+space or a semicolon would write broken or injected shell.
 
 =head1 THE INSTALL VERB
 
@@ -98,10 +107,11 @@ without this row.
 =head1 RETURN VALUES
 
 C<command> returns a hash reference. The body of C<shim> returns 0
-after the print, and 1 when no release stamped the running file, or
-when that file does not open. The body of C<install> returns 0 after
-the copy, and 1 after a failed one. Either verb returns 2 for a
-command line that holds an argument.
+after the print. It returns 1 when no release stamped the running
+file, when the version is no dotted-decimal number, or when that file
+does not open. The body of C<install> returns 0 after the copy, and 1
+after a failed one. Either verb returns 2 for a command line that
+holds an argument.
 
 =head1 SEE ALSO
 

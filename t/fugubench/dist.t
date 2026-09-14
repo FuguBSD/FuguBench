@@ -9,12 +9,16 @@
 # root, as t/fugubench/pack.t does. That build writes install.sh
 # beside the pack, and one case runs that script.
 #
-# A stub downloader on a temporary PATH serves the pack, so no case
-# reaches the network. Each case sets HOME to its own temporary tree,
-# reads no operator home, and writes nowhere else. A child that loads
-# the checkout carries PERL5LIB, because CI installs Fugu in a tree
-# that PERL5LIB alone names. No run of the packed file carries it:
-# the packed file must need no installed Fugu.
+# A stub downloader on a temporary PATH serves the pack, and it
+# discards every flag. One case serves the pack from a loopback
+# server behind a redirect, and that case runs the downloader of the
+# host, so it reads the real flags. No case reaches the network.
+#
+# Each case sets HOME to its own temporary tree, reads no operator
+# home, and writes nowhere else. A child that loads the checkout
+# carries PERL5LIB, because CI installs Fugu in a tree that PERL5LIB
+# alone names. No run of the packed file carries it: the packed file
+# must need no installed Fugu.
 
 use v5.34;
 use warnings;
@@ -22,14 +26,15 @@ use experimental 'signatures';
 no feature qw(indirect multidimensional bareword_filehandles);
 
 use Test::More;
-use Cwd            ();
-use Digest::SHA    ();
-use File::Basename ();
-use File::Copy     qw(copy);
-use File::Path     qw(make_path);
-use File::Spec     ();
-use File::Temp     qw(tempdir);
-use FindBin        qw($RealBin);
+use Cwd              ();
+use Digest::SHA      ();
+use File::Basename   ();
+use File::Copy       qw(copy);
+use File::Path       qw(make_path);
+use File::Spec       ();
+use File::Temp       qw(tempdir);
+use FindBin          qw($RealBin);
+use IO::Socket::INET ();
 use lib "$RealBin/../../lib";
 
 use Fugu;
@@ -164,6 +169,76 @@ sub _which ($name)
 	}
 
 	return;
+}
+
+# _on_shim_path($name):
+#	True when the PATH that _shell writes holds one tool. The
+#	redirect case runs the downloader of the host, and not a
+#	stub, so it needs one of the three.
+sub _on_shim_path ($name)
+{
+	# The path goes through a variable, because a file test reads
+	# a bare class name as a filehandle on perl 5.34.
+	for my $dir ( $PERLDIR, '/usr/bin', '/bin', '/sbin' ) {
+		my $path = File::Spec->catfile( $dir, $name );
+		return 1 if -x $path;
+	}
+
+	return 0;
+}
+
+# _server($body):
+#	One HTTP server on the loopback address. It answers every
+#	path but /asset with a 302 to /asset, and /asset with $body.
+#	It returns the port and the pid, and the caller kills that
+#	pid.
+#
+#	A release asset of GitHub answers 302, so the download of the
+#	shim must follow a redirect (DIST-SHIM-3). The server holds
+#	that case inside the host, so no case reaches the network.
+sub _server ($body)
+{
+	my $listen = IO::Socket::INET->new(
+		LocalAddr => '127.0.0.1',
+		LocalPort => 0,
+		Listen    => 5,
+		Proto     => 'tcp',
+		ReuseAddr => 1,
+	) or die "cannot listen on the loopback address: $!\n";
+	my $port = $listen->sockport;
+
+	my $pid = fork;
+	die "cannot fork: $!\n" unless defined $pid;
+	if ( !$pid ) {
+
+		# The parent kills this child with a signal, so no END
+		# block of Test::More runs here.
+		while ( my $c = $listen->accept ) {
+			binmode $c;
+			my $request = q{};
+			while ( my $line = <$c> ) {
+				$request .= $line;
+				last if $line =~ /\A\r?\n\z/;
+			}
+			my $path = ( $request =~ m{\A[A-Z]+[ ](\S+)} )[0] // q{};
+			if ( $path eq '/asset' ) {
+				print {$c} "HTTP/1.1 200 OK\r\n",
+				    'Content-Length: ', length $body, "\r\n",
+				    "Connection: close\r\n\r\n", $body;
+			}
+			else {
+				print {$c} "HTTP/1.1 302 Found\r\n",
+				    "Location: /asset\r\n",
+				    "Content-Length: 0\r\n",
+				    "Connection: close\r\n\r\n";
+			}
+			close $c;
+		}
+		exit 0;
+	}
+	close $listen;
+
+	return ( $port, $pid );
 }
 
 # _tools($dir):
@@ -448,6 +523,45 @@ subtest 'the shim fetches, verifies, caches, and runs' => sub {
 	);
 };
 
+subtest 'the shim follows a redirect' => sub {
+
+	# A release asset of GitHub answers 302, so a downloader that
+	# follows no redirect writes the redirect answer and not the
+	# pack (DIST-SHIM-3). This case runs the downloader of the
+	# host against a loopback server, so it reads the real flags.
+	# Every other case runs a stub that discards them.
+	my @get = grep { _on_shim_path($_) } qw(curl wget ftp);
+	my @sum = grep { _on_shim_path($_) } qw(sha256 shasum sha256sum);
+	plan skip_all => 'the PATH of the shim holds no downloader,'
+	    . ' or no digest tool'
+	    unless @get && @sum;
+
+	my $home = tempdir( CLEANUP => 1 );
+	my $bin  = tempdir( CLEANUP => 1 );
+	my ( $port, $pid ) = _server( _read($packed) );
+
+	# The URL of the shim names the release, so the case points
+	# that one line at the loopback server. Every other line of
+	# the shim stands as the verb wrote it.
+	my $local = $text;
+	my $count = ( $local =~ s{^url=\S+$}{url=http://127.0.0.1:$port/get}m );
+	is( $count, 1, 'the shim holds one url line' );
+
+	my $shim = _write( "$home/fugubench.sh", $local );
+	my $r    = _shell( $home, $bin, $shim, argv => ['version'] );
+	kill 'TERM', $pid;
+	waitpid $pid, 0;
+
+	is( $r->{exit_code}, 0, "the $get[0] run exits 0" )
+	    or diag $r->{stderr};
+	is( $r->{stdout}, $line, "and $get[0] served the packed file" );
+
+	my $file = "$home/.cache/fugubench/$VERSION/fugubench";
+	ok( -f $file, 'the shim caches the file' ) or return;
+	is( _sha256($file), $digest,
+		'and the cache holds the body of the second address' );
+};
+
 subtest 'a download that fails the digest stops the shim' => sub {
 	my $home  = tempdir( CLEANUP => 1 );
 	my $bin   = tempdir( CLEANUP => 1 );
@@ -485,14 +599,20 @@ subtest 'FUGUBENCH replaces the download' => sub {
 	ok( !-e $log, 'and it reaches no downloader' );
 	ok( !-e "$home/.cache", 'and it writes no cache' );
 
-	# DIST-SHIM-2 conditions on an executable. A value that names
-	# none leaves the shim on the path of the release.
+	# DIST-SHIM-2 conditions on an executable, and the developer
+	# named the file, so a value that names none stops the shim.
+	# A silent download of the release would run a program that
+	# the developer did not name.
 	my $plain = _write( "$home/plain", "not a program\n" );
 	my $p     = _shell( $home, $bin, $shim,
 		argv => ['version'], FUGUBENCH => $plain );
-	is( $p->{exit_code}, 0, 'a value that names no executable exits 0' );
-	is( $p->{stdout},    $line, 'and the shim runs the release' );
-	ok( -f $log, 'and it reaches the downloader' );
+	isnt( $p->{exit_code}, 0, 'a value that names no executable exits'
+		    . ' non-zero' );
+	is( $p->{stdout}, q{}, 'and no program runs' );
+	like( $p->{stderr}, qr/\Q$plain\E is no executable/,
+		'and the message names the value' );
+	ok( !-e $log,     'and it reaches no downloader' );
+	ok( !-e "$home/.cache", 'and it writes no cache' );
 };
 
 subtest 'the shim names the downloaders that it wants' => sub {
@@ -541,13 +661,21 @@ subtest 'the shim names the downloaders that it wants' => sub {
 
 subtest 'the shim takes each downloader and each digest tool' => sub {
 
-	# The curl and shasum pair runs above. These two runs cover the
-	# four other branches of DIST-SHIM-3, and the second pair is
-	# the pair that OpenBSD selects. PATH holds the stub directory
-	# alone, so no tool of the host takes a branch.
-	my %tail = ( sha256 => 'q{}', sha256sum => '"  $f"' );
+	# The case above takes the first digest tool of the host, and
+	# that is `sha256` on macOS. So these three runs cover each
+	# downloader and each digest tool of DIST-SHIM-3 by
+	# themselves. PATH holds the stub directory alone, so no tool
+	# of the host takes a branch, and the last pair is the pair
+	# that OpenBSD selects.
+	my %tail =
+	    ( sha256 => 'q{}', shasum => '"  $f"', sha256sum => '"  $f"' );
 
-	for my $pair ( [ 'wget', 'sha256sum' ], [ 'ftp', 'sha256' ] ) {
+	for my $pair (
+		[ 'curl', 'shasum' ],
+		[ 'wget', 'sha256sum' ],
+		[ 'ftp',  'sha256' ]
+	    )
+	{
 		my ( $get, $sum ) = @$pair;
 
 		my $home = tempdir( CLEANUP => 1 );
