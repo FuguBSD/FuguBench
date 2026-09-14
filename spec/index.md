@@ -3,10 +3,9 @@
 FuguBench outfits a FuguBSD checkout for a coding agent. It installs the
 dependencies of a repository, and it makes and removes worktrees. It operates
 the learning library, answers the Claude Code hooks, and measures the sessions.
-One program holds the five verbs. It is one packed Perl file that runs on core
-Perl v5.34 and carries the Fugu modules that it uses. Every consumer runs the
-program through a wrapper shim, so no install step precedes the first
-`make deps`.
+One program holds every verb. It is one packed Perl file that runs on core Perl
+v5.34 and carries the Fugu modules that it uses. Every consumer runs the program
+through a wrapper shim, so no install step precedes the first `make deps`.
 
 This document is the entry point of the specification. It holds the plan
 contract, the ID conventions, and the document tables.
