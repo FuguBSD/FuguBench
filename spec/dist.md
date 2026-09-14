@@ -87,9 +87,12 @@ Tooling sync, as a new `scripts/deps` is today.
   `~/.local/bin/fugubench` with mode 755, atomically, and print the path. It
   must print a hint when `PATH` lacks the directory.
 - **DIST-INSTALL-3** — The stable address of the install script is
-  `https://fugubsd.org/get`, and the published command is
-  `curl -fsSL https://fugubsd.org/get | sh`. FuguBSD/Website serves the script
-  of the latest release at that address.
+  `https://bench.fugubsd.org/get`, and the published command is
+  `curl -fsSL https://bench.fugubsd.org/get | sh`. The website of this
+  repository serves a stub at that address. The stub must fetch the `install.sh`
+  of the latest release into a variable, and it must then run that variable. The
+  stub holds no version and no digest, so a release needs no change of the
+  website.
 
 <a id="dist-update"></a>
 
