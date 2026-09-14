@@ -27,9 +27,11 @@
 # through that variable alone. PATH names the downloader of this host
 # and nothing else, so the verb needs no other command.
 #
-# The fixtures under t/fugubench/fixtures/update/ hold one signify key
-# pair and two release trees. scratch/make-update-fixture.sh made them
-# one time, with signify(1):
+# The fixtures under t/fugubench/fixtures/update/ hold the public half
+# of one signify key pair and two signed release trees. The tree holds
+# no secret key, because each manifest carries its signature already
+# and no case signs. scratch/make-update-fixture.sh made the set one
+# time, with signify(1), and a new set needs a new pair:
 #
 #	signify -G -n -c 'fugubench update fixture' \
 #		-p keys/fugubench-fixture.pub \
