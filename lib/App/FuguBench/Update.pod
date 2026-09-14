@@ -78,7 +78,7 @@ manifest.
 =item 6.
 
 It writes the bytes over the running file, atomically and with mode
-755, and it prints C<fugubench E<lt>versionE<gt>>.
+755, and it prints the result line C<fugubench E<lt>versionE<gt>>.
 
 =back
 

@@ -201,6 +201,7 @@ sub _run ( $app, @argv )
 
 	return EXIT_ERROR unless _replace( $app, $file, $packed );
 
+	# The result line of the verb (DIST-UPDATE-4).
 	say "fugubench $version";
 
 	return EXIT_SUCCESS;
