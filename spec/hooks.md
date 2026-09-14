@@ -30,7 +30,9 @@ design of the events comes from Workspace WS-HOOKS and Workspace LIB-HOOKS.
 - **HOOK-SESSION-1** — `SessionStart` must run `wiki init` and then `wiki open`.
   The session identifier is `session_id` of the payload. The verb replaces each
   character outside letters, digits, a dot, a dash, and an underscore with a
-  dash.
+  dash. The page name of `open` is the result of the event, and it must reach
+  standard output as the only line. The clone directory of `init` must go to
+  standard error, because the harness reads the other stream (CLI-PROGRAM-4).
 - **HOOK-SESSION-2** — The project of the session is the child of
   `wiki.projects` that holds `cwd`, and otherwise `wiki.project`.
 - **HOOK-SESSION-3** — `SessionEnd` must run `wiki close`. `SessionEnd` does not
@@ -49,6 +51,10 @@ design of the events comes from Workspace WS-HOOKS and Workspace LIB-HOOKS.
 - **HOOK-WORKTREE-2** — `WorktreeRemove` must remove nothing (D-06). It must
   read `worktree_path`, print the path and the manual command
   `make -C <root> worktree-remove NAME=<name>` to standard error, and exit zero.
+  It must split the path at the last `/<worktree.base>/` segment. The part in
+  front of the segment is the root, and the part after it is the name. The
+  `worktree.base` value comes from the checkout of the payload `cwd`. Without
+  that value, and without the segment, the verb must print the path alone.
 - **HOOK-WORKTREE-3** — Claude Code runs the create hook again when a session
   reconnects, with the same name. `WorktreeCreate` must exit 0 for that run, and
   WT-CREATE-7 gives the result.

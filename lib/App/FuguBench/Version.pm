@@ -42,13 +42,24 @@ sub command ( $, $ )
 	return {
 		summary => 'print the version',
 		run     => sub ( $, @ ) {
-			say sprintf 'fugubench %s (Fugu %s)',
-			    App::FuguBench->VERSION // NO_STAMP,
-			    Fugu->VERSION           // NO_STAMP;
+			say __PACKAGE__->line;
 
 			return EXIT_SUCCESS;
 		},
 	};
+}
+
+# App::FuguBench::Version->line:
+#	The line of the verb: the version of the program and the
+#	version of the Fugu library beside it.
+#
+#	The doctor reports this line as its version check, so the two
+#	verbs never name a different version.
+sub line ($)
+{
+	return sprintf 'fugubench %s (Fugu %s)',
+	    App::FuguBench->VERSION // NO_STAMP,
+	    Fugu->VERSION           // NO_STAMP;
 }
 
 1;
