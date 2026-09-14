@@ -225,6 +225,35 @@ sub _module_name ($file)
 	return $name;
 }
 
+# _minor($pragma):
+#	The minor number of one version pragma. A v-string holds it
+#	in the second field, so `use v5.36;` and `use v5.36.0;` both
+#	name 36. A decimal holds it in three digits of the fraction,
+#	so `use 5.034;` names 34 and `use 5.36;` names 360.
+sub _minor ($pragma)
+{
+	return $1 if $pragma =~ /\Av5[.]([0-9]+)/;
+
+	my ($fraction) = $pragma =~ /\A5[.]([0-9]+)/;
+
+	return 0 + substr( "${fraction}00", 0, 3 );
+}
+
+# _above_floor($source):
+#	Each version pragma of one text that names a perl above the
+#	floor. A pragma takes a v-string or a decimal, and a patch
+#	field or none, so the scan reads four spellings.
+sub _above_floor ($source)
+{
+	my @above;
+	for my $line ( split /^/, $source ) {
+		next unless $line =~ /\A\s*use\s+(v?5[.][0-9.]+)\s*;/;
+		push @above, $1 if _minor($1) > 34;
+	}
+
+	return @above;
+}
+
 # _write($path, $text):
 #	Write one file of a temporary tree.
 sub _write ( $path, $text )
@@ -276,12 +305,20 @@ my $text   = _read($packed);
 # on the floor, so this case reads the text of the pack and needs no
 # perl 5.34 (DIST-PACK-5).
 {
-	my @above;
-	for my $line ( split /^/, $text ) {
-		next unless $line =~ /\A\s*use\s+(?:v5[.]|5[.]0)([0-9]+)\s*;/;
-		push @above, $1 if $1 > 34;
-	}
+	my @above = _above_floor($text);
 	is( "@above", q{}, 'every version pragma of the pack names perl 5.34 or less' );
+
+	# The scan reads each spelling, so this case holds it to all
+	# four. A scan that misses one reports a clean pack, and the
+	# register of STATUS.md then overstates its coverage.
+	my $sample = join q{}, map { "$_\n" } 'use v5.34;', 'use v5.34.0;',
+	    'use 5.034;', 'use v5.36;', 'use v5.36.0;', 'use 5.036;',
+	    'use 5.36;';
+	is_deeply(
+		[ _above_floor($sample) ],
+		[ 'v5.36', 'v5.36.0', '5.036', '5.36' ],
+		'and the scan reads each spelling of a version pragma'
+	);
 }
 
 # No core module enters the pack (DIST-PACK-3)
