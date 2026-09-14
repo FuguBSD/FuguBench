@@ -97,16 +97,13 @@ sub _stub ( $tree, $name, @body )
 }
 
 # _install($tree):
-#	One install script of three lines. The first line is the word
-#	-n alone, which the echo of a shell can read as an option; sh
-#	reports it as an absent command and runs the rest. The next
-#	lines set a variable that holds a backslash, and write it to
-#	the marker with printf. A marker with the exact bytes proves
-#	that every byte of the script reached sh.
+#	One install script of two lines. The lines set a variable that
+#	holds a backslash, and write it to the marker with printf. A
+#	marker with the exact bytes proves that every byte of the
+#	script reached sh.
 sub _install ($tree)
 {
-	return "-n\n"
-	    . "token='$TOKEN'\n"
+	return "token='$TOKEN'\n"
 	    . "printf '%s\\n' \"\$token\" > '$tree/marker'\n";
 }
 
@@ -163,6 +160,21 @@ for my $name (qw(curl wget ftp)) {
 		"$TOKEN\n", "$name: sh ran the script byte for byte" );
 	is( _log($tree), "$COMMAND{$name}\n",
 		"$name: the stub runs $COMMAND{$name}" );
+}
+
+# Two stub downloaders in one tree (DIST-INSTALL-4). The search takes
+# curl before wget, so the log holds the command of curl alone. A tree
+# with one downloader proves no order.
+{
+	my $tree   = _tree();
+	my $script = _print( $tree, _install($tree) );
+	_stub( $tree, 'curl', $script );
+	_stub( $tree, 'wget', $script );
+
+	my $result = _run($tree);
+	is( $result->{exit_code}, 0, 'two downloaders: the stub exits 0' );
+	is( _log($tree), "$COMMAND{curl}\n",
+		'the search takes curl before wget' );
 }
 
 # The asset of a release answers 302. curl without -L then exits 0
