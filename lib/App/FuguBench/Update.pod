@@ -63,7 +63,9 @@ It downloads F<SHA256> and F<SHA256.sig> into a temporary directory.
 =item 3.
 
 It writes each embedded key as a signify public key file, in trust
-order, and it verifies the manifest against that list.
+order, and it verifies the manifest against that list. A failure of
+that check names the install command, because a rotation of the
+release key can leave this program without the key of the release.
 
 =item 4.
 

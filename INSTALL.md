@@ -21,6 +21,10 @@ verifies the release against the signify public keys that the program embeds. It
 refuses a release below the running version, unless the operator passes
 `--allow-downgrade`.
 
+A rotation of the release key can leave the program without the key of a later
+release. The verb then reports that no embedded key verifies the signature, and
+it names the install command. Run that command again to take the new release.
+
 ## From CPAN
 
 Every release goes to CPAN as the `App-FuguBench` distribution. PAUSE indexes an

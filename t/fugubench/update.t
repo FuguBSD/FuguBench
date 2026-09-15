@@ -555,6 +555,15 @@ subtest 'a signature of another release stops the update' => sub {
 		$r->{stderr}, qr/no embedded key verifies the signature/,
 		'and the message names the failed signature'
 	);
+
+	# A rotation of the release key leaves an installed program
+	# without the key of a later release, and the same message
+	# reports that case. The install script reads no embedded key,
+	# so the failure names it (DIST-KEY-3, DIST-INSTALL-3).
+	my $install = 'curl -fsSL https://bench.fugubsd.org/get | sh';
+	like( $r->{stderr}, qr/\Qinstall the program again: $install\E/,
+		'and it names the install command as the path out' );
+
 	_unchanged( $r, 'a bad signature' );
 
 	is_deeply(

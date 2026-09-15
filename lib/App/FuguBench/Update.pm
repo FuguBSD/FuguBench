@@ -78,6 +78,13 @@ use constant {
 
 	# The mode of the replaced program (DIST-INSTALL-2).
 	MODE => 0755,
+
+	# The published install command (DIST-INSTALL-3). A rotation
+	# of the release key can leave this program without the key of
+	# a later release, and the install script reads no embedded
+	# key. The failure of the signature names this command, so the
+	# operator reads the path out (DIST-KEY-3).
+	INSTALL => 'curl -fsSL https://bench.fugubsd.org/get | sh',
 };
 
 # App::FuguBench::Update->command($verb):
@@ -160,6 +167,7 @@ sub _run ( $app, @argv )
 		$log->error( 'no embedded key verifies the signature of %s/%s',
 			$base, MANIFEST );
 		$log->error( '  %s', $signify->error );
+		$log->error( '  install the program again: %s', INSTALL );
 		return EXIT_ERROR;
 	}
 
