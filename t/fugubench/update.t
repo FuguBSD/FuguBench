@@ -106,10 +106,6 @@ plan skip_all => 'Fugu::Signify holds no perl engine'
 my $downloader = Fugu::Curl->new;
 plan skip_all => 'no downloader is on PATH' unless $downloader->is_available;
 
-# The verb module comes after the last module skip_all, because it
-# loads Fugu::Curl and Fugu::Signify itself.
-require App::FuguBench::Update;
-
 # The published install command (DIST-INSTALL-3). Every case reads
 # the constant, so no case repeats the literal.
 my $INSTALL = App::FuguBench::Update::INSTALL();
@@ -263,9 +259,9 @@ my $KEY = ( split /\n/, _slurp("$fixture/keys/fugubench-fixture.pub") )[1];
 # A key body that signed nothing: the fixture body with one step of
 # its key number. A body holds the algorithm in the first two bytes,
 # the key number in the next eight, and the key in the rest. The
-# verifier compares the number before it reads the signature, so this
-# key verifies no fixture release. One case embeds it alone, and the
-# program then lacks the key of the release (DIST-KEY-3).
+# verifier compares the key number before it checks the signature, so
+# this key verifies no fixture release. One case embeds it alone, and
+# the program then lacks the key of the release (DIST-KEY-3).
 my $OTHER = do {
 	my $bytes = MIME::Base64::decode_base64($KEY);
 	my $first = ord substr $bytes, 2, 1;
