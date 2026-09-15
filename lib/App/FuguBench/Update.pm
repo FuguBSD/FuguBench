@@ -42,8 +42,8 @@ use App::FuguBench::Keys;
 # release key, in this process (D-05).
 #
 # The keys come from App::FuguBench::Keys alone. The keys of a
-# consumer never enter here, because a release of the organization
-# carries the keys that verify the next one (DIST-KEY-2).
+# consumer never enter here, because a release decides what it
+# trusts and no file of the host decides it (DIST-KEY-2).
 #
 # The verb reads no checkout (CLI-CHECKOUT-5), so an operator runs it
 # from ~/.local/bin in any directory.

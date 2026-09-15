@@ -25,8 +25,8 @@ no feature qw(indirect multidimensional bareword_filehandles);
 # App::FuguBench::Keys - the embedded release keys.
 #
 # The program embeds the release public keys of the organization in
-# one module (DIST-KEY-1). A release then carries the keys that verify
-# the next release, and no file of the host decides what it trusts.
+# one module (DIST-KEY-1). No file of the host then decides what a
+# release trusts.
 #
 # The keys are those of deps/KEYS.txt of the org pack, and
 # t/fugubench/keys.t holds this module to that file.

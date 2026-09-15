@@ -13,8 +13,8 @@ App::FuguBench::Keys - the embedded release keys of fugubench
 =head1 DESCRIPTION
 
 B<App::FuguBench::Keys> holds the release public keys of the
-organization. The program embeds them in this module, so a release
-carries the keys that verify the next release. The keys are those of
+organization. The program embeds them in this module, so no file of
+the host decides what a release trusts. The keys are those of
 F<deps/KEYS.txt> of the org pack, and F<t/fugubench/keys.t> holds
 this module to that file.
 
