@@ -151,9 +151,13 @@ Tooling sync, as a new `scripts/deps` is today.
 - **DIST-KEY-2** — `update` verifies with the embedded keys alone. `deps`
   verifies with the keys of the consumer, per DEPS-KEYS, and never with the
   embedded keys. A consumer decides what it trusts.
-- **DIST-KEY-3** — A key rotation is a release of the program. The old key stays
-  in the list for one release after the new key enters it. An operator one
-  release behind can then still update.
+- **DIST-KEY-3** — A key rotation is a release of the program. The overlap of a
+  rotation lives in `deps/KEYS.txt` of the org pack. That file holds the new key
+  and the old key together for one release, and the module follows the file
+  (DIST-KEY-1). An operator one release behind can then still update. The org
+  pack can also drop the old key at once. The module then holds the new key
+  alone, and an operator whose embedded keys lack the signing key must install
+  again (DIST-INSTALL-3).
 
 <a id="dist-version"></a>
 

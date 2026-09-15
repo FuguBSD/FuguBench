@@ -32,9 +32,9 @@ no feature qw(indirect multidimensional bareword_filehandles);
 # t/fugubench/keys.t holds this module to that file.
 #
 # The line order of that file is the trust order, and the current key
-# comes first. A rotation is a release of the program, and the old key
-# stays in the list for one release after the new key enters it
-# (DIST-KEY-3).
+# comes first. A rotation is a release of the program, and the org
+# pack decides whether the old key stays beside the new one for one
+# release (DIST-KEY-3). This list follows the file either way.
 #
 # DIST-KEY-2 gives this list to `update` alone. The `deps` verb
 # verifies with the keys of the consumer, because a consumer decides
@@ -45,8 +45,8 @@ no feature qw(indirect multidimensional bareword_filehandles);
 # list is source.
 
 use constant KEYS => [ [
-		'fugubsd-1-release',
-		'RWRKSCtmq6YKnnWf4QcNV24EEspYWDvMZO7QhWrSKCqRpdWY+XYQsm9g'
+		'fugureleng-1-release',
+		'RWRPSFq0TxlrugHBInkYJP2+ItDv0UH4Vf3HxXFrIKqTE6tDFibU7l1w'
 	],
 ];
 
