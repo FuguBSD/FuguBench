@@ -10,6 +10,7 @@ on:
     paths:
       - ".fuguwebrc"
       - "web/**"
+      - "man/**"
       - "lib/**.pod"
       - ".github/workflows/publish.yml"
   # A manual run publishes the site again, for example after a change
