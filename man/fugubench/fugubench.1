@@ -86,60 +86,49 @@
 .Sh DESCRIPTION
 .Nm
 outfits a FuguBSD checkout for a coding agent.
-It installs the dependencies that a repository names, and it makes and
-removes the worktrees of a workspace.
-It operates the learning library, answers the Claude Code hooks, and
-measures the sessions.
+It installs the dependencies of a repository, makes and removes
+worktrees, operates the learning library, answers the Claude Code
+hooks, and measures the sessions.
 One verb serves each concern.
 .Pp
-The program is one file.
-It runs on core perl 5.34, and it loads no CPAN module.
-One packed file carries the Fugu modules that it uses, so a host needs
-no installed Fugu.
+The released program is one packed perl file that runs on core perl
+5.34.
+It loads no CPAN module, and the pack carries the Fugu modules that it
+uses.
 .Pp
 A verb operates one checkout: the repository that holds the manifests,
 the worktrees, or the library clone.
-The program walks up from the start directory to the nearest directory
-that holds
+The program walks up from the start directory to the nearest
 .Pa .toolingrc ,
 and that directory is the checkout root.
 The start is the
 .Fl C
-value, or the payload
+value, the payload
 .Ql cwd
 of a hook, or the current directory.
 A verb that needs a configuration key walks on to the nearest
 .Pa .toolingrc
 that holds the key.
-The walk stops at the filesystem root.
 A walk that reaches no
 .Pa .toolingrc
 names the start directory and gives a configuration error.
 A worktree holds a
 .Pa .toolingrc
-of its own, so a worktree is a checkout of its own.
+of its own, and is a checkout.
 .Pp
-Six verbs run no walk.
 .Cm deps
-reads
+runs no walk, and reads
 .Pa deps/<OS>.txt
-relative to the start directory, because a guest runs it out of an
-extracted tarball.
+under the start directory.
 .Cm version , shim , install , update
 and
 .Cm fetch
-read no checkout at all, so each one runs in a home with no
+read no checkout, and run in a home with no
 .Pa .toolingrc .
 .Pp
-Standard output carries the result of a verb only.
+Standard output carries the result of a verb.
 Every diagnostic, and every line of a child command, goes to standard
 error.
-A hook reads standard output, so a git message never reaches it.
-.Pp
-.Nm Fl Fl help
-and
-.Nm Ar verb Fl Fl help
-print the usage to standard output and exit 0.
 A usage error prints the usage to standard error and exits 2.
 .Pp
 The options are as follows:
@@ -149,7 +138,8 @@ Read
 .Ar dir
 as the checkout root, in front of the walk above.
 .It Fl h , Fl Fl help
-Print the usage message and exit.
+Print the usage to standard output and exit 0.
+A verb in front of the option gives the usage of that verb.
 .It Fl Fl verbose
 Trace each child command on standard error.
 A verb can add its own progress lines to that stream.
@@ -198,7 +188,7 @@ manifest beside the file, proves it under the keys of
 and holds the file to the digest of that manifest.
 An entry with no recorded digest and no signature stops the install,
 and a failed check stops the install at once.
-The proof runs in process, so the host needs no
+The proof runs in process, and the host needs no
 .Xr signify 1 .
 .Pp
 .Fl Fl dry-run
@@ -236,8 +226,7 @@ and a downloader on
 the hook entries and the worktree base reference of
 .Pa .claude/settings.json ,
 and the state of the library clone.
-The verb exits 1 when it wrote one problem line, so a make target can
-gate on the report.
+The verb exits 1 when it wrote one problem line.
 .Pp
 .Fl Fl fix
 skips the pending commit of a library clone that sits in a stopped
@@ -260,7 +249,7 @@ The checkout root comes from the payload
 .Ql cwd .
 The verb exits at once, with no change, when the payload holds an
 .Ql agent_id
-key, because a sub-agent sends that payload.
+key.
 .Pp
 .Cm SessionStart
 runs
@@ -281,8 +270,7 @@ and
 from the payload, runs
 .Cm worktree create ,
 and writes the worktree path to standard output as the only line.
-It fails when the worktree cannot be made, because the harness needs
-the path.
+It fails when the worktree cannot be made.
 .Cm WorktreeRemove
 removes nothing.
 It prints the path and the manual remove command to standard error,
@@ -297,8 +285,7 @@ and carries an explicit timeout.
 The subcommand also sets
 .Ql worktree.baseRef
 to
-.Ql head ,
-because a worktree starts at the local HEAD.
+.Ql head .
 A second run causes no change.
 .It Cm install
 Copy the running program to
@@ -312,7 +299,8 @@ Print the wrapper shim of a consumer to standard output.
 The shim is POSIX shell, and a consumer keeps it at
 .Pa scripts/fugubench .
 It holds the download URL and the sha256 digest of the packed file of
-the version that printed it, so the shim is the pin of the release.
+the version that printed it.
+The shim is the pin of the release.
 The shim runs the cached file, or it downloads the packed file, holds
 it to the digest, and caches it.
 A checkout with no tag carries the version 0.0.0, and the verb refuses
@@ -348,7 +336,6 @@ and a failed update prints no line.
 .Pp
 The verb refuses a version below the running one, without
 .Fl Fl allow-downgrade .
-A replay of an earlier release is the attack that the refusal stops.
 The verb also refuses to replace a file under the shim cache, and it
 names the Tooling sync as the path to a new version there.
 A key rotation can leave the program without the key of a later
@@ -365,10 +352,8 @@ Clone
 .Ic wiki.origin
 into the library directory when that directory is absent.
 A second run causes no change.
-A failed clone warns and exits 0, because a checkout without network
-access is normal.
-Each other subcommand reports an absent clone and exits 0, so the
-library stops no session.
+A failed clone warns and exits 0.
+Each other subcommand reports an absent clone and exits 0.
 .It Cm wiki open Ar project session
 Start the session page of
 .Ar session ,
@@ -411,8 +396,7 @@ with its age in days and its date.
 A candidate is a list item that starts with a date, and a
 .Ql Delivered:\&
 mark ends one.
-The subcommand exits 0 when the clone or the page is absent, so a
-checkout without a library passes its gate.
+The subcommand exits 0 when the clone or the page is absent.
 .It Cm worktree create Ar name
 Make the worktree at
 .Pa <root>/<worktree.base>/<name> ,
@@ -438,7 +422,7 @@ repository inside it, and a commit that no remote holds.
 The verb never deletes the branch
 .Cm main ,
 and never the branch of the main checkout.
-Only an operator runs this subcommand, and no hook calls it.
+Only an operator runs this subcommand.
 .It Cm worktree list
 Report each worktree with its name, its age in days, and its state.
 The state is
@@ -458,8 +442,8 @@ child of a directory of repositories, and copies a plain file.
 It copies each regular
 .Pa .env
 file of a cloned tree.
-A destination that exists stays as it is, so a second run repairs a
-partial bootstrap.
+A destination that exists stays as it is.
+A second run repairs a partial bootstrap.
 In the main checkout itself, the subcommand reports that fact and
 changes nothing.
 .El
@@ -472,8 +456,7 @@ A line holds a key, whitespace, and a value.
 A
 .Ql #
 starts a comment.
-The program ignores every other key of the file, because another tool
-owns another prefix.
+The program ignores every other key of the file.
 .Bd -literal -offset indent
 wiki.origin   https://github.com/FuguBSD/Wiki.git
 wiki.projects Projects
@@ -527,8 +510,7 @@ A developer points it at
 of a checkout.
 A value that names no executable makes the shim report the value and
 exit non-zero.
-The shim tests for a set variable, so an empty value names no
-executable either.
+An empty value names no executable either.
 .It Ev FUGUBENCH_RELEASE_URL
 The release address that replaces
 .Lk https://github.com/FuguBSD/FuguBench
@@ -542,8 +524,7 @@ stops with an error when a
 .Cm bin
 entry installs and the variable is unset.
 .Cm update
-refuses to run when the variable is unset or empty, because it cannot
-find the shim cache then.
+refuses to run when the variable is unset or empty.
 .It Ev PATH
 The search path of each child command, and the list that
 .Cm doctor
