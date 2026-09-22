@@ -26,6 +26,11 @@ page "404.html" {
 	unlinked = yes
 }
 
+manuals "Commands" {
+	dir    = man/fugubench
+	anchor = commands
+}
+
 modules "Modules" {
 	dir    = lib/App/FuguBench
 	anchor = modules
