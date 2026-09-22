@@ -106,25 +106,9 @@ The start is the
 value, the payload
 .Ql cwd
 of a hook, or the current directory.
-A verb that needs a configuration key walks on to the nearest
-.Pa .toolingrc
-that holds the key.
-A walk that reaches no
-.Pa .toolingrc
-names the start directory and gives a configuration error.
 A worktree holds a
 .Pa .toolingrc
 of its own, and is a checkout.
-.Pp
-.Cm deps
-runs no walk, and reads
-.Pa deps/<OS>.txt
-under the start directory.
-.Cm version , shim , install , update
-and
-.Cm fetch
-read no checkout, and run in a home with no
-.Pa .toolingrc .
 .Pp
 Standard output carries the result of a verb.
 Every diagnostic, and every line of a child command, goes to standard
@@ -156,40 +140,6 @@ The environments are
 .Cm tool , runtime , test
 and
 .Cm develop .
-A manifest line holds an environment, a type, and a name.
-The types are
-.Cm pkg , dist , cpan
-and
-.Cm bin ,
-and the verb installs them in that order.
-A
-.Cm pkg
-entry reaches the package manager of the platform, a
-.Cm dist
-and a
-.Cm cpan
-entry reach
-.Xr cpanm 1 ,
-and a
-.Cm bin
-entry lands in
-.Pa ~/.local/bin
-with mode 755.
-Without a manifest for the system, the verb reports that fact and
-exits 0.
-.Pp
-The verb holds each download to a digest.
-.Pa deps/SHA256.txt
-records a digest for each versioned download.
-Without a recorded digest, the verb fetches the signed
-.Pa SHA256
-manifest beside the file, proves it under the keys of
-.Pa deps/KEYS.txt ,
-and holds the file to the digest of that manifest.
-An entry with no recorded digest and no signature stops the install,
-and a failed check stops the install at once.
-The proof runs in process, and the host needs no
-.Xr signify 1 .
 .Pp
 .Fl Fl dry-run
 prints each command to standard output, and runs none of them.
@@ -205,13 +155,8 @@ and
 .It Cm deps Fl Fl update-sums Op Fl Fl force
 Record the digest of each versioned download of the manifest in
 .Pa deps/SHA256.txt .
-The operator runs this command, and the install path never runs it.
-The command skips a stable name, and a URL that a signed manifest sits
-beside.
 .Fl Fl force
-rewrites a recorded digest, pins a stable name, and overrides the test
-for a signed manifest.
-A run that records nothing leaves the file as it was, and says so.
+rewrites a recorded digest.
 .It Cm doctor Op Fl Fl fix
 Report the state of the checkout, as one
 .Ql ok <check>: <detail>
@@ -231,89 +176,34 @@ The verb exits 1 when it wrote one problem line.
 .Fl Fl fix
 skips the pending commit of a library clone that sits in a stopped
 rebase, when that commit adds a session page with no observation.
-It refuses every other stop.
 .It Cm fetch Ar file url
 Download one URL to one file, through the downloader of the program.
-The file comes first, and the URL second.
-A URL starts with a scheme, and a URL without one is a usage error.
 .It Cm hook Ar event
 Answer one Claude Code hook event.
-The harness writes a JSON payload to standard input, and the verb
-reads it.
 The events are
 .Cm SessionStart , SessionEnd , WorktreeCreate
 and
 .Cm WorktreeRemove ,
 and another word is a usage error.
-The checkout root comes from the payload
-.Ql cwd .
-The verb exits at once, with no change, when the payload holds an
-.Ql agent_id
-key.
-.Pp
-.Cm SessionStart
-runs
-.Cm wiki init
-and then
-.Cm wiki open ,
-and writes the page name to standard output as the only line.
-.Cm SessionEnd
-runs
-.Cm wiki close .
-A session event never stops a session: each failure warns and exits 0.
-.Pp
-.Cm WorktreeCreate
-reads
-.Ql cwd
-and
-.Ql name
-from the payload, runs
-.Cm worktree create ,
-and writes the worktree path to standard output as the only line.
-It fails when the worktree cannot be made.
-.Cm WorktreeRemove
-removes nothing.
-It prints the path and the manual remove command to standard error,
-and it exits 0.
 .It Cm hook install
 Write the four hook entries in
 .Pa .claude/settings.json
 of the checkout, and keep every other key of the file.
-Each entry runs the shim of the checkout,
-.Pa scripts/fugubench ,
-and carries an explicit timeout.
-The subcommand also sets
-.Ql worktree.baseRef
-to
-.Ql head .
-A second run causes no change.
 .It Cm install
 Copy the running program to
 .Pa ~/.local/bin/fugubench
 with mode 755, atomically, and print the path.
-The verb prints a hint when
-.Ev PATH
-lacks that directory.
 .It Cm shim
 Print the wrapper shim of a consumer to standard output.
 The shim is POSIX shell, and a consumer keeps it at
 .Pa scripts/fugubench .
-It holds the download URL and the sha256 digest of the packed file of
-the version that printed it.
 The shim is the pin of the release.
-The shim runs the cached file, or it downloads the packed file, holds
-it to the digest, and caches it.
 A checkout with no tag carries the version 0.0.0, and the verb refuses
 such a version.
 .It Cm traces Oo Fl Fl root Ar dir Oc Op Fl Fl name Ar name
 Measure the Claude Code sessions of the checkout.
 The verb prints one line for each session that holds a request, sorted
 by start time, under a header.
-The columns are
-.Cm session , start , reqs , peak , out , panel , edits , sub-in ,
-.Cm sub-out
-and
-.Cm rev-peak .
 The verb reads the trace directory of the checkout, of each worktree
 of it, and of each project clone in either.
 .Fl Fl root
@@ -324,36 +214,20 @@ and
 replaces the derived name.
 .It Cm update Oo Fl Fl version Ar tag Oc Op Fl Fl allow-downgrade
 Replace the running program with a verified release.
-The verb fetches the
-.Pa SHA256
-manifest of the latest release, or of the named tag, and proves it
-under the keys that the program embeds.
-It then fetches the packed file, holds it to the manifest digest, and
-replaces the running file atomically.
 The result line is
 .Ql fugubench <version> ,
 and a failed update prints no line.
 .Pp
 The verb refuses a version below the running one, without
 .Fl Fl allow-downgrade .
-The verb also refuses to replace a file under the shim cache, and it
-names the Tooling sync as the path to a new version there.
-A key rotation can leave the program without the key of a later
-release.
-The verb then reports that no embedded key proves the signature, and
-it names the install command.
 .It Cm version
 Print
 .Ql fugubench <version>
 and the Fugu version of the snapshot on one line.
-A checkout with no tag gives the version 0.0.0.
 .It Cm wiki init
 Clone
 .Ic wiki.origin
 into the library directory when that directory is absent.
-A second run causes no change.
-A failed clone warns and exits 0.
-Each other subcommand reports an absent clone and exits 0.
 .It Cm wiki open Ar project session
 Start the session page of
 .Ar session ,
@@ -361,10 +235,6 @@ commit, and push.
 The page name is
 .Pa Session-<project>-<date>-<n>.md ,
 and the verb writes it to standard output as the only line.
-When a page holds the session identifier already, the verb prints that
-page and changes nothing.
-A push that meets a page of the same name at the origin makes the verb
-rename its page to the next free index and retry.
 .It Cm wiki note Ar page file
 .It Cm wiki admit Ar page file
 Append the text of
@@ -373,16 +243,12 @@ to
 .Ar page
 after one blank line, commit, and push.
 The two subcommands differ in the commit subject only.
-An empty file is an error.
-A failed push warns and exits 0, and the commit waits for the next
-push.
 .It Cm wiki close Ar session
 Append the
 .Ql Closed:\&
 line to the page of
 .Ar session ,
 commit, and push.
-A second close changes nothing, and a session with no page is normal.
 .It Cm wiki status
 Report each open session with its page, its
 .Ql Claim:\&
@@ -393,10 +259,6 @@ count, and then the count of unpushed commits.
 Report each undelivered candidate of the page
 .Pa Rule-candidates.md ,
 with its age in days and its date.
-A candidate is a list item that starts with a date, and a
-.Ql Delivered:\&
-mark ends one.
-The subcommand exits 0 when the clone or the page is absent.
 .It Cm worktree create Ar name
 Make the worktree at
 .Pa <root>/<worktree.base>/<name> ,
@@ -407,8 +269,6 @@ The verb then runs
 .Ql make -C <worktree> bootstrap MAIN=<root>
 when the worktree holds a makefile.
 It writes the worktree path to standard output as the only line.
-A second create of the same name runs the bootstrap again and exits 0.
-A failed create leaves no worktree and no branch.
 .It Cm worktree remove Oo Fl Fl force Oc Ar name
 Remove the worktree of
 .Ar name
@@ -419,33 +279,18 @@ the verb refuses a worktree that holds work at risk, and the message
 names each cause.
 The causes are an uncommitted change in the worktree or in a
 repository inside it, and a commit that no remote holds.
-The verb never deletes the branch
-.Cm main ,
-and never the branch of the main checkout.
-Only an operator runs this subcommand.
 .It Cm worktree list
 Report each worktree with its name, its age in days, and its state.
 The state is
 .Cm clean ,
 or each cause of
 .Cm remove .
-Without a worktree, the subcommand prints
-.Ql no worktrees .
 .It Cm worktree clone Ar path ...
 Copy each gitignored
 .Ar path
 of the main checkout that
 .Fl C
 names into the current directory, with no network.
-The subcommand makes a local clone of a git repository, clones each
-child of a directory of repositories, and copies a plain file.
-It copies each regular
-.Pa .env
-file of a cloned tree.
-A destination that exists stays as it is.
-A second run repairs a partial bootstrap.
-In the main checkout itself, the subcommand reports that fact and
-changes nothing.
 .El
 .Sh CONFIGURATION
 .Nm
@@ -486,21 +331,6 @@ The directory of the worktrees, under the root.
 The default is
 .Pa .claude/worktrees .
 .El
-.Pp
-The home of a key is the directory of the
-.Pa .toolingrc
-that holds it, and the root is the home of a default.
-A
-.Ic wiki.\&
-value anchors at the home of
-.Ic wiki.origin ,
-and
-.Ic worktree.base
-anchors at the root.
-A directory value is a relative path with no
-.Ql ..
-segment, and it names a directory below its anchor.
-A URL value holds a scheme.
 .Sh ENVIRONMENT
 .Bl -tag -width "PERL_LOCAL_LIB_ROOT"
 .It Ev FUGUBENCH
@@ -511,27 +341,6 @@ of a checkout.
 A value that names no executable makes the shim report the value and
 exit non-zero.
 An empty value names no executable either.
-.It Ev FUGUBENCH_RELEASE_URL
-The release address that replaces
-.Lk https://github.com/FuguBSD/FuguBench
-in each download of
-.Cm update .
-A test and a developer point the verb at another server with it.
-.It Ev HOME
-The home directory.
-.Cm deps
-stops with an error when a
-.Cm bin
-entry installs and the variable is unset.
-.Cm update
-refuses to run when the variable is unset or empty.
-.It Ev PATH
-The search path of each child command, and the list that
-.Cm doctor
-reads for
-.Xr git 1 ,
-.Xr make 1
-and a downloader.
 .It Ev PERL_LOCAL_LIB_ROOT
 With a value,
 .Cm deps
@@ -547,12 +356,6 @@ command.
 The configuration of the checkout.
 .It Pa deps/<OS>.txt
 The dependency manifest of one operating system.
-.It Pa deps/SHA256.txt
-The recorded digest of each versioned download.
-.It Pa deps/KEYS.txt
-The signify public keys of the organization.
-.It Pa deps/KEYS.local.txt
-The third-party keys of the consumer.
 .It Pa scripts/fugubench
 The wrapper shim of a consumer.
 .It Pa .claude/settings.json
@@ -621,13 +424,10 @@ fugubench 0.0.0 (Fugu 0.5.0)
 .Ed
 .Sh SEE ALSO
 .Xr cpanm 1 ,
-.Xr curl 1 ,
-.Xr ftp 1 ,
 .Xr git 1 ,
 .Xr make 1 ,
 .Xr perl 1 ,
-.Xr signify 1 ,
-.Xr wget 1
+.Xr uname 1
 .Pp
 The module documentation is in the
 .Pa .pod
