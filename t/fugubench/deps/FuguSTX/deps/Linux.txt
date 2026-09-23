@@ -1,8 +1,0 @@
-# External dependencies of FuguSTX. scripts/deps installs each line.
-# The secret gate of make check runs gitleaks, so the tool environment
-# installs it before every other environment.
-tool bin gitleaks https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_{os}_{arch}.tar.gz gitleaks
-# The Scaleway CLI operates the infrastructure (spec/infrastructure.md).
-runtime bin scw https://github.com/scaleway/scaleway-cli/releases/download/v2.61.0/scaleway-cli_2.61.0_{os}_{arch}
-# OpenTofu applies the infra/ stacks (infra/CLAUDE.md pins >= 1.11.0).
-runtime bin tofu https://github.com/opentofu/opentofu/releases/download/v1.12.6/tofu_1.12.6_{os}_{arch}.zip tofu

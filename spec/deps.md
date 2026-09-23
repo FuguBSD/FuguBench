@@ -2,10 +2,9 @@
 
 `fugubench deps` installs the external tools, the Perl distributions, the CPAN
 modules, and the prebuilt binaries that a repository names in `deps/<OS>.txt`.
-The design comes from the synced `scripts/deps` of Tooling, and the verb must
-give the same trace over the same manifests (CLI-CONFORMANCE-2). Two parts
-change. Every download goes through Fugu LIB-CURL, and every signature check
-runs in-process through Fugu LIB-SIGNIFY with the engine of Fugu LIB-ED25519.
+The verb is the one dependency installer of the organization. Every download
+goes through Fugu LIB-CURL, and every signature check runs in-process through
+Fugu LIB-SIGNIFY with the engine of Fugu LIB-ED25519.
 
 <a id="deps-manifest"></a>
 
@@ -33,8 +32,7 @@ runs in-process through Fugu LIB-SIGNIFY with the engine of Fugu LIB-ED25519.
   run, and it must run none of them. Each line starts with `+ ` and holds every
   argument shell-quoted. The trace is the result of a dry run, so it goes to
   standard output. A run without `--dry-run` must write no trace there, and
-  `--verbose` must trace each command on standard error. The trace is the oracle
-  of CLI-CONFORMANCE-2.
+  `--verbose` must trace each command on standard error.
 - **DEPS-MANIFEST-7** — A `pkg` name and a `cpan` name must not start with a
   dash, and neither may be a URL. Both reach a package manager, which owns its
   own check. A `dist` URL and a `bin` URL must take the shape check of
@@ -85,9 +83,8 @@ runs in-process through Fugu LIB-SIGNIFY with the engine of Fugu LIB-ED25519.
   that a tier covers it, before the first install of that type. That pre-pass
   reads the digest file and the key set, and it asks no network. A set with one
   entry that no tier covers must install nothing, and the verb must make no
-  install directory. DEPS-TIER-2 states what a failed digest check leaves. The
-  install order comes from the synced `scripts/deps`, which CLI-CONFORMANCE-2
-  pins.
+  install directory. DEPS-TIER-2 states what a failed digest check leaves.
+  DEPS-MANIFEST-4 states the order of the types.
 - **DEPS-INSTALL-10** — On success the verb must end with one line that names
   the installed environment.
 

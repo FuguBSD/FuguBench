@@ -208,8 +208,7 @@ sub _digest ( $app, $file )
 #	A release asset answers a redirect, so each download follows
 #	one. curl needs -L for that, and without it curl writes the
 #	empty body of the redirect answer. wget and ftp follow a
-#	redirect with no option: scripts/ftp of the org pack fetches
-#	a release asset with each one.
+#	redirect with no option.
 #
 #	The gate tests FUGUBENCH for a set variable, and not for a
 #	non-empty value. `FUGUBENCH=$(command -v fugubench)` writes

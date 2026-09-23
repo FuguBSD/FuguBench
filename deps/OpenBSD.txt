@@ -1,8 +1,8 @@
-# External dependencies of FuguBench. scripts/deps installs each line.
-# gitleaks publishes no OpenBSD build, and the ports tree holds no
-# port for it. An operator on OpenBSD installs it by hand, and the
-# secret gate of CI runs on Linux. signify(1) sits in base, so the
-# signify tier of the runtime entry needs no package.
+# External dependencies of FuguBench. The fugubench deps verb
+# installs each line. gitleaks publishes no OpenBSD build, and the
+# ports tree holds no port for it. An operator on OpenBSD installs it
+# by hand, and the secret gate of CI runs on Linux. signify(1) sits in
+# base, so the signify tier of the runtime entry needs no package.
 
 runtime dist https://github.com/FuguBSD/Fugu/releases/latest/download/Fugu.tar.gz
 

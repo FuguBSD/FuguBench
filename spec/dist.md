@@ -52,9 +52,9 @@ script. It also covers the update, the embedded keys, and the version.
 ## The wrapper shim
 
 A consumer holds a wrapper shim at `scripts/fugubench`. The org pack of Tooling
-syncs it (D-09), and the make fragment calls it in place of `scripts/deps`. The
-shim is the pin, because it holds the version that it runs. A new version is a
-Tooling sync, as a new `scripts/deps` is today.
+syncs it (D-09), and the make fragment of the consumer calls it. The shim is the
+pin, because it holds the version that it runs. A new version reaches a consumer
+through a Tooling sync.
 
 - **DIST-SHIM-1** — `fugubench shim` must print the shim to standard output. The
   shim is POSIX shell. It holds the download URL and the sha256 digest of the

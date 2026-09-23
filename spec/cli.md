@@ -189,7 +189,7 @@ starts a comment.
 
 ## Conformance
 
-The program replaces four scripts that have tests, and the tests come with it.
+The program replaces three scripts that have tests, and the tests come with it.
 
 - **CLI-CONFORMANCE-1** — The test suite must hold the black-box tests of the
   Workspace scripts `worktree.pl`, `wiki.pl`, and `traces.pl`. A ported test
@@ -197,10 +197,3 @@ The program replaces four scripts that have tests, and the tests come with it.
   fixture, the pragma block of the source floor, and the unit citations. It must
   change nothing else. An assertion on a file of the Workspace stays in the
   Workspace test. A behavior that a test asserts must hold in the program.
-- **CLI-CONFORMANCE-2** — The dry-run trace of `deps` over the manifests of
-  every consumer must equal the trace of the synced `scripts/deps`, line for
-  line. The rule holds until Tooling retires the script. The fixtures are copies
-  of the consumer manifests and digest files under `t/`. The verb downloads
-  in-process, so the test must replace the path of the `ftp` helper with
-  `fugubench fetch`, and each temporary directory with one token. It must
-  compare the `+ ` lines, and it must change nothing else.

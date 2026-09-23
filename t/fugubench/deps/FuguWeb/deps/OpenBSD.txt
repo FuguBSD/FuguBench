@@ -1,7 +1,0 @@
-runtime dist https://github.com/FuguBSD/Fugu/releases/download/v0.5.0/Fugu.tar.gz
-runtime pkg lowdown
-
-# t/fuguweb/rotate.t drives the rotation against signify(1), which
-# OpenBSD holds in base, so this manifest names no package for it.
-test pkg p5-Perl-Critic
-test pkg p5-Perl-Tidy
