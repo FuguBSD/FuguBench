@@ -1,6 +1,8 @@
 # The website, built by fuguweb(1).
 
-site = FuguBench
+site   = FuguBench
+url    = https://bench.fugubsd.org/
+footer = footer.body.html
 
 nav "index.html" {
 	label = Home
